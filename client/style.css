@@ -1,0 +1,254 @@
+/* =====================================
+   General Page
+===================================== */
+
+body {
+
+    font-family: Arial, sans-serif;
+
+    background: #f5f7fa;
+
+    margin: 0;
+
+    padding: 20px;
+
+    color: #333;
+
+}
+
+
+
+/* =====================================
+   Header
+===================================== */
+
+header {
+
+    text-align: center;
+
+    margin-bottom: 30px;
+
+}
+
+
+header h1 {
+
+    color: #1b8f4b;
+
+    margin-bottom: 10px;
+
+}
+
+
+header p {
+
+    color: #666;
+
+}
+
+
+
+/* =====================================
+   Search
+===================================== */
+
+input,
+select {
+
+    width: 100%;
+
+    max-width: 600px;
+
+    padding: 12px;
+
+    margin: 10px auto;
+
+    display: block;
+
+    border: 1px solid #ccc;
+
+    border-radius: 8px;
+
+    font-size: 16px;
+
+}
+
+
+
+/* =====================================
+   Job Container
+===================================== */
+
+#jobs-container {
+
+    display: grid;
+
+    gap: 20px;
+
+}
+
+
+
+/* =====================================
+   Job Card
+===================================== */
+
+.job-card {
+
+    background: white;
+
+    border-radius: 15px;
+
+    padding: 20px;
+
+    box-shadow: 0 4px 10px rgba(0,0,0,.08);
+
+    transition: .25s;
+
+}
+
+
+.job-card:hover {
+
+    transform: translateY(-3px);
+
+    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+
+}
+
+
+
+/* =====================================
+   Title
+===================================== */
+
+.job-card h3 {
+
+    margin-top: 0;
+
+    color: #1b8f4b;
+
+}
+
+
+
+/* =====================================
+   Paragraphs
+===================================== */
+
+.job-card p {
+
+    margin: 8px 0;
+
+    line-height: 1.5;
+
+}
+
+
+
+/* =====================================
+   Apply Button
+===================================== */
+
+.job-card a {
+
+    display: inline-block;
+
+    margin-top: 15px;
+
+    background: #1b8f4b;
+
+    color: white;
+
+    padding: 10px 20px;
+
+    border-radius: 8px;
+
+    text-decoration: none;
+
+    font-weight: bold;
+
+    transition: .2s;
+
+}
+
+
+.job-card a:hover {
+
+    background: #15733c;
+
+}
+
+
+
+/* =====================================
+   Badges
+===================================== */
+
+.badge {
+
+    display: inline-block;
+
+    padding: 5px 10px;
+
+    border-radius: 20px;
+
+    font-size: 13px;
+
+    font-weight: bold;
+
+    margin-right: 6px;
+
+    margin-bottom: 10px;
+
+}
+
+
+.beginner {
+
+    background: #d4edda;
+
+    color: #155724;
+
+}
+
+
+.new {
+
+    background: #fff3cd;
+
+    color: #856404;
+
+}
+
+
+.salary {
+
+    background: #d1ecf1;
+
+    color: #0c5460;
+
+}
+
+
+
+/* =====================================
+   Mobile
+===================================== */
+
+@media (max-width: 600px) {
+
+    body {
+
+        padding: 10px;
+
+    }
+
+
+    .job-card {
+
+        padding: 15px;
+
+    }
+
+}
