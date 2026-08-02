@@ -9,9 +9,9 @@ const bot = new TelegramBot(
 
 async function sendJobToTelegram(job, jobId) {
 
+    try {
 
-    const message = `
-
+        const message = `
 🆕 New Remote Job
 
 💼 ${job.title}
@@ -26,43 +26,43 @@ async function sendJobToTelegram(job, jobId) {
 
 📈 ${job.experience || ""}
 
-
 Apply through Lomi:
 `;
 
+        const link =
+        `${process.env.LOMI_URL}/job/${jobId}`;
 
 
-  const link =
-`${process.env.LOMI_URL}/job/${jobId}`;
-
-    await bot.sendMessage(
-
-        process.env.TELEGRAM_GROUP_ID,
-
-        message,
-
-        {
-            reply_markup: {
-
-                inline_keyboard: [
-
-                    [
-                        {
-                            text: "🔗 Apply on Lomi",
-                            url: link
-                        }
+        await bot.sendMessage(
+            process.env.TELEGRAM_GROUP_ID,
+            message,
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "🔗 Apply on Lomi",
+                                url: link
+                            }
+                        ]
                     ]
-
-                ]
-
+                }
             }
+        );
 
-        }
 
-    );
+        console.log("✅ Telegram sent");
+
+
+    } catch(error) {
+
+        console.log(
+            "❌ Telegram error:",
+            error.message
+        );
+
+    }
 
 }
-
-
 
 module.exports = sendJobToTelegram;
