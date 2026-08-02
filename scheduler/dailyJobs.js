@@ -88,11 +88,13 @@ async function collectJobs(db) {
 // ========================================
 module.exports = function(db) {
 
-    // Run every day at 7:15 AM
-    cron.schedule("0 6 * * *", () => {
+    // Run once when server starts
+    collectJobs(db);
 
-        collectJobs(db);
-
+    // Then run every day at 6:00 AM
+    cron.schedule("0 6 * * *", async () => {
+        await collectJobs(db);
     });
 
+    console.log("✅ Daily job scheduler started");
 };
