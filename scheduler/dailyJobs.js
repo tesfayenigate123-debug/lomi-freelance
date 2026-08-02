@@ -89,7 +89,7 @@ async function collectJobs(db) {
 module.exports = function(db) {
 
     // Run every day at 7:15 AM
-    cron.schedule("* * * * *", () => {
+    cron.schedule("0 6 * * *", () => {
 
         collectJobs(db);
 
