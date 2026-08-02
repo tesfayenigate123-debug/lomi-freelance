@@ -4,8 +4,7 @@
 const express = require("express");
 
 const {
-    initializeDatabase,
-    saveJob
+    initializeDatabase
 } = require("./database/db");
 
 
@@ -16,9 +15,9 @@ const app = express();
 
 
 // ========================================
-// Port number
+// Port number (Railway compatible)
 // ========================================
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 // ========================================
@@ -27,6 +26,10 @@ const PORT = 3000;
 app.use(express.json());
 
 app.use(express.static("client"));
+
+
+// Database variable
+let db;
 
 
 // ========================================
@@ -46,7 +49,6 @@ app.get("/", (req, res) => {
 // ========================================
 app.post("/jobs", (req, res) => {
 
-
     const {
         title,
         company,
@@ -57,9 +59,7 @@ app.post("/jobs", (req, res) => {
     } = req.body;
 
 
-
     db.run(
-
         `
         INSERT INTO jobs
         (
@@ -72,30 +72,21 @@ app.post("/jobs", (req, res) => {
         )
 
         VALUES (?, ?, ?, ?, ?, ?)
-
         `,
-
         [
-
             title,
             company,
             location,
             source,
             apply_link,
             posted_date
-
         ]
-
     );
 
 
     res.json({
-
-        message:
-        "Job added successfully"
-
+        message: "Job added successfully"
     });
-
 
 });
 
@@ -105,7 +96,6 @@ app.post("/jobs", (req, res) => {
 // ========================================
 app.get("/jobs", (req, res) => {
 
-
     const result =
     db.exec(
         "SELECT * FROM jobs ORDER BY id DESC"
@@ -114,9 +104,7 @@ app.get("/jobs", (req, res) => {
 
     res.json(result);
 
-
 });
-
 
 
 // ========================================
@@ -124,46 +112,30 @@ app.get("/jobs", (req, res) => {
 // ========================================
 app.get("/job/:id", (req, res) => {
 
-
-    const id =
-    Number(req.params.id);
-
+    const id = Number(req.params.id);
 
 
     const result =
     db.exec(
-
         "SELECT * FROM jobs WHERE id = ?",
-
         [id]
-
     );
 
 
-
     if (
-
         !result[0] ||
-
         result[0].values.length === 0
-
     ) {
 
-
         return res.send(
-
             "<h2>Job not found</h2>"
-
         );
-
 
     }
 
 
-
     const job =
     result[0].values[0];
-
 
 
     res.send(`
@@ -182,48 +154,32 @@ ${job[1]} - Lomi Freelance
 <style>
 
 body {
-
     font-family: Arial, sans-serif;
-
     margin: 30px;
-
 }
-
 
 .job-card {
 
-    max-width: 700px;
-
-    border: 1px solid #ddd;
-
-    padding: 20px;
-
-    border-radius: 10px;
+    max-width:700px;
+    border:1px solid #ddd;
+    padding:20px;
+    border-radius:10px;
 
 }
-
 
 .apply {
 
-    display: inline-block;
-
-    margin-top: 20px;
-
-    padding: 12px 20px;
-
-    background: black;
-
-    color: white;
-
-    text-decoration: none;
-
-    border-radius: 5px;
+    display:inline-block;
+    margin-top:20px;
+    padding:12px 20px;
+    background:black;
+    color:white;
+    text-decoration:none;
+    border-radius:5px;
 
 }
 
-
 </style>
-
 
 </head>
 
@@ -239,65 +195,17 @@ body {
 </h1>
 
 
+${job[2] ? `<p>🏢 Company: ${job[2]}</p>` : ""}
 
-${
-job[2]
-?
-`<p>🏢 Company: ${job[2]}</p>`
-:
-""
-}
+${job[3] ? `<p>🌍 Location: ${job[3]}</p>` : ""}
 
+${job[4] ? `<p>📝 ${job[4]}</p>` : ""}
 
+${job[5] ? `<p>📂 Category: ${job[5]}</p>` : ""}
 
-${
-job[3]
-?
-`<p>🌍 Location: ${job[3]}</p>`
-:
-""
-}
+${job[6] ? `<p>💰 Salary: ${job[6]}</p>` : ""}
 
-
-
-${
-job[4]
-?
-`<p>📝 ${job[4]}</p>`
-:
-""
-}
-
-
-
-${
-job[5]
-?
-`<p>📂 Category: ${job[5]}</p>`
-:
-""
-}
-
-
-
-${
-job[6]
-?
-`<p>💰 Salary: ${job[6]}</p>`
-:
-""
-}
-
-
-
-${
-job[7]
-?
-`<p>📈 Experience: ${job[7]}</p>`
-:
-""
-}
-
+${job[7] ? `<p>📈 Experience: ${job[7]}</p>` : ""}
 
 
 <a class="apply"
@@ -307,7 +215,6 @@ target="_blank">
 Apply Now
 
 </a>
-
 
 
 </div>
@@ -326,41 +233,47 @@ Apply Now
 // ========================================
 // Start server
 // ========================================
-let db;
-
-
 async function startServer() {
 
+    try {
 
-    db =
-    await initializeDatabase();
-
-
-
-    // Start daily job collector
-    require("./scheduler/dailyJobs")(db);
-
-
-
-    console.log(
-        "✅ Database initialized."
-    );
-
-
-
-    app.listen(PORT, () => {
+        db = await initializeDatabase();
 
 
         console.log(
-            `🚀 Server running on http://localhost:${PORT}`
+            "✅ Database initialized."
         );
 
 
-    });
+        // Start scheduler
+        require("./scheduler/dailyJobs")(db);
 
+
+        app.listen(
+            PORT,
+            "0.0.0.0",
+            () => {
+
+                console.log(
+                    `🚀 Server running on port ${PORT}`
+                );
+
+            }
+        );
+
+
+    } catch(error) {
+
+        console.log(
+            "❌ Server startup error:",
+            error.message
+        );
+
+        process.exit(1);
+
+    }
 
 }
-
 
 
 startServer();
