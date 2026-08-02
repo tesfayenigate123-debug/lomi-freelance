@@ -64,4 +64,35 @@ async function collectJobs(db) {
 
         });
 
-        // Remove jobs older
+        // Remove jobs older than 7 days
+        deleteExpiredJobs(db);
+
+        console.log(
+            "Jobs saved and Telegram updated."
+        );
+
+    } catch (error) {
+
+        console.log(
+            "Daily job error:",
+            error.message
+        );
+
+    }
+
+}
+
+
+// ========================================
+// Export scheduler
+// ========================================
+module.exports = function(db) {
+
+    // Run every day at 7:15 AM
+    cron.schedule("50 8 * * *", () => {
+
+        collectJobs(db);
+
+    });
+
+};
