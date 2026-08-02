@@ -27,85 +27,41 @@ const sendJobToTelegram =
 require("../services/telegram");
 
 
-
 // ========================================
-// Export scheduler
+// Function to collect jobs
 // ========================================
-module.exports = function(db) {
+async function collectJobs(db) {
 
+    console.log(
+        "Starting daily job collection..."
+    );
 
-    cron.schedule("0 6 * * *", async () => {
+    try {
 
+        // Fetch jobs
+        const jobs =
+        await fetchJobs();
 
         console.log(
-            "Starting daily job collection..."
+            `Collected ${jobs.length} jobs`
         );
 
+        // Save jobs and send to Telegram
+        jobs.forEach(job => {
 
-        try {
-
-
-            // Get jobs
-            const jobs =
-            await fetchJobs();
-
-
+            const jobId =
+            saveJob(db, job);
 
             console.log(
-                `Collected ${jobs.length} jobs`
+                "Saved job ID:",
+                jobId
             );
 
-
-
-            // Save jobs and send to Telegram
-            jobs.forEach(job => {
-
-
-                const jobId =
-                saveJob(db, job);
-
-
-
-                console.log(
-                    "Saved job ID:",
-                    jobId
-                );
-
-
-
-                sendJobToTelegram(
-                    job,
-                    jobId
-                );
-
-
-            });
-
-
-
-            // Remove jobs older than 7 days
-            deleteExpiredJobs(db);
-
-
-
-            console.log(
-                "Jobs saved and Telegram updated."
+            sendJobToTelegram(
+                job,
+                jobId
             );
 
+        });
 
-        } catch(error) {
-
-
-            console.log(
-                "Daily job error:",
-                error.message
-            );
-
-
-        }
-
-
-    });
-
-
-};
+        // Remove jobs older
