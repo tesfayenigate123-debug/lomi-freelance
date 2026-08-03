@@ -7,7 +7,7 @@ const {
     initializeDatabase
 } = require("./database/db");
 
-
+console.log(require("./database/db"));
 // ========================================
 // Create Express application
 // ========================================
