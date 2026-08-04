@@ -115,15 +115,13 @@ module.exports = function(db) {
 
 
     // Then run every day at 6:00 AM
-    cron.schedule(
-        "0 6 * * *",
-        async () => {
+   cron.schedule("0 9 * * *", () => {
 
-            await collectJobs(db);
+    collectJobs(db);
 
-        }
-    );
-
+}, {
+    timezone: "Africa/Addis_Ababa"
+});
 
     console.log(
         "✅ Daily job scheduler started"
