@@ -116,7 +116,7 @@ await fetchJobicyJobs();
 
         job =>
 
-        job.score >= 45
+        job.score > 65
 
     );
 

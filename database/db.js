@@ -30,6 +30,25 @@ async function initializeDatabase() {
 
     }
 
+db.run(`
+    CREATE TABLE IF NOT EXISTS visitors (
+        id INTEGER PRIMARY KEY,
+        count INTEGER DEFAULT 0
+    )
+`);
+
+const check = db.exec(
+    "SELECT * FROM visitors"
+);
+
+if (!check[0] || check[0].values.length === 0) {
+
+    db.run(
+        "INSERT INTO visitors (count) VALUES (0)"
+    );
+
+}
+
 
     db.run(`
         CREATE TABLE IF NOT EXISTS jobs (
@@ -190,16 +209,12 @@ function saveJob(db, job) {
 
 
 
-    const result = db.exec(
-        "SELECT last_insert_rowid()"
-    );
+   const result = db.exec(
+    "SELECT id FROM jobs ORDER BY id DESC LIMIT 1"
+);
 
-
-    return result[0].values[0][0];
-
+return result[0].values[0][0];
 }
-
-
 
 // ========================================
 // Delete jobs older than 7 days

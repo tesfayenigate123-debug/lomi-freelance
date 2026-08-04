@@ -37,12 +37,14 @@ let db;
 // ========================================
 app.get("/", (req, res) => {
 
-    res.send(
-        "Welcome to Lomi Freelance"
-    );
+    db.run(`
+        UPDATE visitors
+        SET count = count + 1
+    `);
+
+    res.send("Welcome to Lomi Freelance");
 
 });
-
 
 // ========================================
 // Add a new freelance job
@@ -90,7 +92,17 @@ app.post("/jobs", (req, res) => {
 
 });
 
+app.get("/visitors", (req, res) => {
 
+    const result = db.exec(
+        "SELECT count FROM visitors"
+    );
+
+    res.json({
+        visitors: result[0].values[0][0]
+    });
+
+});
 // ========================================
 // Get all freelance jobs
 // ========================================
