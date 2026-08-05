@@ -10,8 +10,12 @@ const DB_FILE = "./database/lomi.db";
 // Helper function to save in-memory sql.js state to disk
 function persistDatabase(db) {
     if (db) {
-        const data = db.export();
-        fs.writeFileSync(DB_FILE, Buffer.from(data));
+        try {
+            const data = db.export();
+            fs.writeFileSync(DB_FILE, Buffer.from(data));
+        } catch (err) {
+            console.error("❌ Failed to persist database disk image:", err.message);
+        }
     }
 }
 
@@ -46,6 +50,14 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 // ========================================
 app.use(express.json());
+
+// Enable CORS so client scripts can fetch without restriction
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+});
+
 app.use(express.static("client"));
 
 // Global database reference
@@ -66,22 +78,30 @@ app.get("/", (req, res) => {
 // Visitor count API
 // ========================================
 app.get("/visitors", (req, res) => {
-    const result = db.exec("SELECT count FROM visitors");
-    const count = result[0]?.values[0]?.[0] || 0;
-    res.json({ visitors: count });
+    try {
+        const result = db.exec("SELECT count FROM visitors");
+        const count = result[0]?.values[0]?.[0] || 0;
+        res.json({ visitors: count });
+    } catch (error) {
+        res.status(500).json({ visitors: 0 });
+    }
 });
 
 // ========================================
-// Get all freelance jobs (Clean JSON API)
+// Get all freelance jobs (Supports /jobs AND /api/jobs)
 // ========================================
-app.get("/jobs", (req, res) => {
+const handleGetJobs = (req, res) => {
     try {
         const jobs = getJobs(db);
         res.json(jobs);
     } catch (error) {
+        console.error("❌ Job retrieval error:", error.message);
         res.status(500).json({ error: "Failed to retrieve jobs" });
     }
-});
+};
+
+app.get("/jobs", handleGetJobs);
+app.get("/api/jobs", handleGetJobs);
 
 // ========================================
 // Add a new job manually
@@ -200,7 +220,7 @@ app.get("/job/:id", (req, res) => {
         ${job.category ? `<div class="meta-item">📂 <strong>Category:</strong> ${job.category}</div>` : ""}
         ${job.salary ? `<div class="meta-item">💰 <strong>Salary:</strong> ${job.salary}</div>` : ""}
         ${job.experience ? `<div class="meta-item">📈 <strong>Experience:</strong> ${job.experience}</div>` : ""}
-        
+
         ${job.description ? `<div class="description"><strong>Description:</strong><br>${job.description}</div>` : ""}
 
         <a class="apply" href="${job.apply_link}" target="_blank" rel="noopener noreferrer">
