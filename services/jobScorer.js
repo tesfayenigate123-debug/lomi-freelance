@@ -1,163 +1,166 @@
 // ========================================
-// Lomi Approved Categories
-// ========================================
-
-const categories = {
-
-    "Data Entry": [
-        "data entry",
-        "data clerk",
-        "data specialist"
-    ],
-
-    "Chat Operator": [
-        "chat",
-        "live chat"
-    ],
-
-    "Appointment Setter": [
-        "appointment setter",
-        "appointment"
-    ],
-
-    "Survey": [
-        "survey",
-        "market research"
-    ],
-
-    "QA Tester": [
-        "qa",
-        "quality assurance",
-        "tester",
-        "testing"
-    ],
-
-    "Social Media": [
-        "social media",
-        "facebook",
-        "instagram",
-        "tiktok",
-        "content moderator"
-    ],
-
-    "Virtual Assistant": [
-        "virtual assistant",
-        "administrative assistant",
-        "admin assistant",
-        "executive assistant"
-    ],
-
-    "Transcription": [
-        "transcription",
-        "transcriber"
-    ],
-
-    "Community Moderator": [
-        "community",
-        "moderator"
-    ],
-
-    "Online Tutor": [
-        "tutor",
-        "teaching assistant",
-        "teacher"
-    ],
-
-    "Customer Support": [
-        "customer support",
-        "customer service",
-        "support specialist",
-        "support representative",
-        "email support"
-    ]
-
-};
-
-
-
-// ========================================
-// Score Job
+// Lomi Smart Job Scorer
 // ========================================
 
 function scoreJob(job) {
 
-    let score = 0;
+    const title =
+        (job.title || "").toLowerCase();
 
-    const text = (
-        (job.title || "") +
-        " " +
-        (job.description || "")
-    ).toLowerCase();
-
-
-
-    // Detect category
-
-    let detectedCategory = "";
-
-    for (const category in categories) {
-
-        if (
-
-            categories[category].some(
-                keyword => text.includes(keyword)
-            )
-
-        ) {
-
-            detectedCategory = category;
-
-            score += 20;
-
-            break;
-
-        }
-
-    }
-
-
-
-    // Remote
-
-    if (
-
-        (job.location || "")
-        .toLowerCase()
-        .includes("remote")
-
-    ) {
-
-        score += 25;
-
-    }
-
-
-
-    // Worldwide
+    const description =
+        (job.description || "").toLowerCase();
 
     const location =
         (job.location || "").toLowerCase();
 
+    const source =
+        (job.source || "").toLowerCase();
+
+    const applyLink =
+        job.apply_link || "";
+
+    const text =
+        `${title} ${description} ${location}`;
+
+    let score = 0;
+
+    let quality = "Poor";
+
+
+    // ========================================
+    // Remote Jobs
+    // ========================================
+
+    if (text.includes("remote")) {
+
+        score += 30;
+
+    }
+
+    if (text.includes("worldwide")) {
+
+        score += 10;
+
+    }
+
+    if (text.includes("hybrid")) {
+
+        score -= 20;
+
+    }
+
     if (
+        text.includes("on-site") ||
+        text.includes("onsite")
+    ) {
 
-        location.includes("world") ||
-        location.includes("global") ||
-        location.includes("anywhere")
+        score -= 30;
 
+    }
+
+
+    // ========================================
+    // Experience
+    // ========================================
+
+    if (
+        text.includes("no experience") ||
+        text.includes("no prior experience")
     ) {
 
         score += 20;
 
     }
 
+    else if (
+        text.includes("entry level") ||
+        text.includes("entry-level")
+    ) {
+
+        score += 18;
+
+    }
+
+    else if (
+        text.includes("0 year") ||
+        text.includes("0-2") ||
+        text.includes("0–2") ||
+        text.includes("1 year") ||
+        text.includes("2 years")
+    ) {
+
+        score += 15;
+
+    }
+
+    else if (
+        text.includes("3 years") ||
+        text.includes("4 years")
+    ) {
+
+        score += 5;
+
+    }
+
+    else if (
+        text.includes("5 years") ||
+        text.includes("6 years") ||
+        text.includes("7 years") ||
+        text.includes("8 years") ||
+        text.includes("10 years")
+    ) {
+
+        score -= 20;
+
+    }
 
 
-    // Description
+    // ========================================
+    // Salary
+    // ========================================
+
+    if (
+        job.salary &&
+        job.salary.trim() !== ""
+    ) {
+
+        score += 10;
+
+    }
+
+
+    // ========================================
+    // Description Quality
+    // ========================================
+
+    if (
+        description.length > 200
+    ) {
+
+        score += 10;
+
+    }
+
+    else if (
+        description.length > 50
+    ) {
+
+        score += 5;
+
+    }
+
+
+    // ========================================
+    // Trusted Source
+    // ========================================
 
     if (
 
-        job.description &&
-        job.description.length > 40
+        source.includes("remotive") ||
+
+        source.includes("himalayas") ||
+
+        source.includes("jobicy")
 
     ) {
 
@@ -166,50 +169,131 @@ function scoreJob(job) {
     }
 
 
-
-    // Salary
+    // ========================================
+    // Valid Apply Link
+    // ========================================
 
     if (
 
-        job.salary &&
-        job.salary.trim() !== ""
+        applyLink.startsWith("https://")
 
     ) {
 
-        score += 10;
+        score += 5;
+
+    }
+
+    else {
+
+        score -= 50;
 
     }
 
 
+    // ========================================
+    // Senior Roles
+    // ========================================
 
-    // Apply link
+    const seniorWords = [
+
+        "senior",
+
+        "lead",
+
+        "manager",
+
+        "director",
+
+        "principal",
+
+        "architect",
+
+        "staff"
+
+    ];
+
 
     if (
 
-        job.apply_link &&
-        job.apply_link.startsWith("http")
+        seniorWords.some(word =>
+            text.includes(word)
+        )
 
     ) {
 
-        score += 10;
+        score -= 30;
 
     }
 
+
+    // ========================================
+    // Country Restricted
+    // ========================================
+
+    const restricted = [
+
+        "united states",
+
+        "usa only",
+
+        "us only",
+
+        "canada only",
+
+        "uk only",
+
+        "europe only"
+
+    ];
+
+
+    if (
+
+        restricted.some(word =>
+            text.includes(word)
+        )
+
+    ) {
+
+        score -= 20;
+
+    }
+
+
+    // ========================================
+    // Quality
+    // ========================================
+
+    if (score >= 80) {
+
+        quality = "Excellent";
+
+    }
+
+    else if (score >= 60) {
+
+        quality = "Good";
+
+    }
+
+    else if (score >= 40) {
+
+        quality = "Acceptable";
+
+    }
+
+    else {
+
+        quality = "Poor";
+
+    }
 
 
     return {
 
         score,
 
-        quality:
-            score >= 75
-            ? "Excellent"
-            : score >= 60
-            ? "Good"
-            : "Poor",
-
-        category:
-            detectedCategory
+        quality
 
     };
 

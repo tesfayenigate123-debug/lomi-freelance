@@ -1,121 +1,77 @@
 // ========================================
-// Import sql.js
+// Import sql.js and fs
 // ========================================
 const initSqlJs = require("sql.js");
 const fs = require("fs");
 
-
 // Database file location
 const DB_FILE = "./database/lomi.db";
-
 
 // ========================================
 // Initialize database
 // ========================================
 async function initializeDatabase() {
-
     const SQL = await initSqlJs();
-
     let db;
 
-
     if (fs.existsSync(DB_FILE)) {
-
         const buffer = fs.readFileSync(DB_FILE);
         db = new SQL.Database(buffer);
-
     } else {
-
         db = new SQL.Database();
-
     }
 
-db.run(`
-    CREATE TABLE IF NOT EXISTS visitors (
-        id INTEGER PRIMARY KEY,
-        count INTEGER DEFAULT 0
-    )
-`);
+    // Visitors tracking table
+    db.run(`
+        CREATE TABLE IF NOT EXISTS visitors (
+            id INTEGER PRIMARY KEY,
+            count INTEGER DEFAULT 0
+        )
+    `);
 
-const check = db.exec(
-    "SELECT * FROM visitors"
-);
+    const check = db.exec("SELECT * FROM visitors");
+    if (!check[0] || check[0].values.length === 0) {
+        db.run("INSERT INTO visitors (count) VALUES (0)");
+    }
 
-if (!check[0] || check[0].values.length === 0) {
-
-    db.run(
-        "INSERT INTO visitors (count) VALUES (0)"
-    );
-
-}
-
-
+    // Jobs table schema
     db.run(`
         CREATE TABLE IF NOT EXISTS jobs (
-
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-
             title TEXT NOT NULL,
-
             company TEXT,
-
             location TEXT,
-
             description TEXT,
-
             category TEXT,
-
             salary TEXT,
-
             experience TEXT,
-
             source TEXT,
-
             apply_link TEXT UNIQUE,
-
             posted_date TEXT,
-
             collected_date TEXT,
-
             score INTEGER,
-
             quality TEXT
-
         );
     `);
 
-
     saveDatabase(db);
-
     console.log("✅ Database initialized.");
-
     return db;
-
 }
 
-
-
 // ========================================
-// Save database
+// Save database to disk
 // ========================================
 function saveDatabase(db) {
-
     const data = db.export();
-
-    fs.writeFileSync(
-        DB_FILE,
-        Buffer.from(data)
-    );
-
+    fs.writeFileSync(DB_FILE, Buffer.from(data));
 }
 
-
-
 // ========================================
-// Save one job
+// Save one job (Returns ID for NEW jobs, null for EXISTING)
 // ========================================
 function saveJob(db, job) {
-
+    if (!job.apply_link) return null;
 
     job.title = job.title || "";
     job.company = job.company || "";
@@ -130,38 +86,22 @@ function saveJob(db, job) {
     job.score = job.score || 0;
     job.quality = job.quality || "";
 
-
-    const today =
-        new Date()
-        .toISOString()
-        .slice(0, 10);
-
-
+    const today = new Date().toISOString().slice(0, 10);
     job.collected_date = today;
 
-
-
-    // Check existing job
+    // Check if job already exists by URL
     const existing = db.exec(
         "SELECT id FROM jobs WHERE apply_link = ?",
         [job.apply_link]
     );
 
-
-    if (
-        existing[0] &&
-        existing[0].values.length > 0
-    ) {
-
-        return existing[0].values[0][0];
-
+    // If existing job found, skip insertion and return null
+    if (existing[0] && existing[0].values.length > 0) {
+        return null;
     }
-
-
 
     // Insert new job
     db.run(
-
         `
         INSERT INTO jobs
         (
@@ -179,13 +119,9 @@ function saveJob(db, job) {
             score,
             quality
         )
-
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
         `,
-
         [
-
             job.title,
             job.company,
             job.location,
@@ -199,84 +135,59 @@ function saveJob(db, job) {
             job.collected_date,
             job.score,
             job.quality
-
         ]
-
     );
-
 
     saveDatabase(db);
 
+    // Fetch and return the newly created ID
+    const result = db.exec("SELECT id FROM jobs WHERE apply_link = ?", [job.apply_link]);
+    if (result[0] && result[0].values.length > 0) {
+        return result[0].values[0][0];
+    }
 
-
-   const result = db.exec(
-    "SELECT id FROM jobs ORDER BY id DESC LIMIT 1"
-);
-
-return result[0].values[0][0];
+    return null;
 }
 
 // ========================================
 // Delete jobs older than 7 days
 // ========================================
 function deleteExpiredJobs(db) {
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    const cutoff = date.toISOString().slice(0, 10);
 
-
-    const date =
-    new Date();
-
-
-    date.setDate(
-        date.getDate() - 7
-    );
-
-
-    const cutoff =
-    date.toISOString()
-    .slice(0,10);
-
-
-
-    db.run(
-        "DELETE FROM jobs WHERE collected_date < ?",
-        [cutoff]
-    );
-
-
+    db.run("DELETE FROM jobs WHERE collected_date < ?", [cutoff]);
     saveDatabase(db);
 
-
-    console.log("🗑️ Old jobs deleted.");
-
+    console.log("🗑️ Old jobs deleted (older than 7 days).");
 }
 
-
-
 // ========================================
-// Get all jobs
+// Get all jobs formatted as objects
 // ========================================
 function getJobs(db) {
+    const res = db.exec("SELECT * FROM jobs ORDER BY id DESC");
+    if (!res[0]) return [];
 
+    const columns = res[0].columns;
+    const values = res[0].values;
 
-    return db.exec(
-        "SELECT * FROM jobs ORDER BY id DESC"
-    );
-
+    return values.map((row) => {
+        const job = {};
+        columns.forEach((col, index) => {
+            job[col] = row[index];
+        });
+        return job;
+    });
 }
-
-
 
 // ========================================
 // Export functions
 // ========================================
 module.exports = {
-
     initializeDatabase,
-
     saveJob,
-
     getJobs,
-
     deleteExpiredJobs
-
 };
