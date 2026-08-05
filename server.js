@@ -58,19 +58,35 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.static("client"));
-
 // Global database reference
 let db;
+
+// ========================================
+// GLOBAL VISITOR COUNTER MIDDLEWARE
+// Counts every user loading the Homepage OR any /job/:id page
+// (Skips background API/static asset requests like /jobs, .css, .js)
+// ========================================
+app.use((req, res, next) => {
+    // Only count main HTML page visits (Homepage '/' or single job detail pages '/job/...')
+    const isPageVisit = req.path === "/" || req.path.startsWith("/job/");
+    
+    if (isPageVisit && db) {
+        try {
+            db.run("UPDATE visitors SET count = count + 1");
+            persistDatabase(db);
+        } catch (err) {
+            console.error("❌ Visitor count update error:", err.message);
+        }
+    }
+    next();
+});
+
+app.use(express.static("client"));
 
 // ========================================
 // Home route
 // ========================================
 app.get("/", (req, res) => {
-    if (db) {
-        db.run("UPDATE visitors SET count = count + 1");
-        persistDatabase(db);
-    }
     res.sendFile(__dirname + "/client/index.html");
 });
 
@@ -163,6 +179,10 @@ app.get("/job/:id", (req, res) => {
 
     const job = results[0];
 
+    // Fetch live total visitor count for detail page header display
+    const visitorRes = db.exec("SELECT count FROM visitors");
+    const visitorCount = visitorRes[0]?.values[0]?.[0] || 1;
+
     res.send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -189,6 +209,11 @@ app.get("/job/:id", (req, res) => {
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
+        .visitor-badge {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
         h1 { margin-top: 0; font-size: 24px; color: #111827; }
         .meta-item { margin: 8px 0; font-size: 15px; color: #374151; }
         .description {
@@ -214,6 +239,7 @@ app.get("/job/:id", (req, res) => {
 </head>
 <body>
     <div class="job-card">
+        <div class="visitor-badge">👁️ Total Website Visits: ${visitorCount}</div>
         <h1>💼 ${job.title}</h1>
         ${job.company ? `<div class="meta-item">🏢 <strong>Company:</strong> ${job.company}</div>` : ""}
         ${job.location ? `<div class="meta-item">🌍 <strong>Location:</strong> ${job.location}</div>` : ""}
