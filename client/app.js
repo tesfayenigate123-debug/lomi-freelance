@@ -1,287 +1,155 @@
 // ========================================
-// Store jobs
-// Structure: Array variable
+// Global State
 // ========================================
 let allJobs = [];
 
-
 // ========================================
-// Load jobs from server
-// Structure: Fetch API
+// Load Jobs from Express API
 // ========================================
-fetch("/jobs")
-
-.then(response => response.json())
-
-.then(data => {
-
-
-    // sql.js returns {columns, values}
-    allJobs = data[0]?.values || [];
-
-
-    displayJobs(allJobs);
-
-
-})
-
-.catch(error => {
-
-    console.log(
-        "Error loading jobs:",
-        error
-    );
-
+document.addEventListener("DOMContentLoaded", () => {
+    fetchJobs();
+    setupEventListeners();
 });
 
-
-
-
+function fetchJobs() {
+    fetch("/jobs")
+        .then((response) => response.json())
+        .then((data) => {
+            if (Array.isArray(data)) {
+                allJobs = data;
+            } else if (data && data[0] && data[0].values) {
+                allJobs = data[0].values;
+            } else {
+                allJobs = [];
+            }
+            filterAndDisplayJobs();
+        })
+        .catch((error) => {
+            console.error("Error loading jobs:", error);
+            const container = document.getElementById("jobs-container");
+            if (container) {
+                container.innerHTML = "<p>Failed to load jobs. Please try again later.</p>";
+            }
+        });
+}
 
 // ========================================
-// Display jobs
-// Structure: Function definition
+// Event Listeners for Search & Filter
+// ========================================
+function setupEventListeners() {
+    const searchInput = document.getElementById("search");
+    const categorySelect = document.getElementById("category");
+
+    if (searchInput) {
+        searchInput.addEventListener("input", filterAndDisplayJobs);
+    }
+
+    if (categorySelect) {
+        categorySelect.addEventListener("change", filterAndDisplayJobs);
+    }
+}
+
+// ========================================
+// Filter Logic
+// ========================================
+function filterAndDisplayJobs() {
+    const searchVal = (document.getElementById("search")?.value || "").toLowerCase().trim();
+    const categoryVal = (document.getElementById("category")?.value || "all").toLowerCase();
+
+    const filtered = allJobs.filter((job) => {
+        const title = (job.title || job[1] || "").toLowerCase();
+        const company = (job.company || job[2] || "").toLowerCase();
+        const description = (job.description || job[4] || "").toLowerCase();
+        const category = (job.category || job[5] || "").toLowerCase();
+
+        // 1. Search Query Match
+        const matchesSearch =
+            !searchVal ||
+            title.includes(searchVal) ||
+            company.includes(searchVal) ||
+            description.includes(searchVal);
+
+        // 2. Category Match
+        const matchesCategory =
+            categoryVal === "all" ||
+            category.includes(categoryVal) ||
+            title.includes(categoryVal);
+
+        return matchesSearch && matchesCategory;
+    });
+
+    displayJobs(filtered);
+}
+
+// ========================================
+// Render Job Cards
 // ========================================
 function displayJobs(jobs) {
-
-
-    const container =
-    document.getElementById(
-        "jobs-container"
-    );
-
+    const container = document.getElementById("jobs-container");
+    if (!container) return;
 
     container.innerHTML = "";
 
-
-
-    if (jobs.length === 0) {
-
-
-        container.innerHTML =
-        "<p>No jobs available.</p>";
-
-
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = "<p>No matching remote jobs found.</p>";
         return;
-
     }
 
+    jobs.forEach((job) => {
+        const id = job.id || job[0];
+        const title = job.title || job[1] || "Untitled Position";
+        const company = job.company || job[2] || "";
+        const location = job.location || job[3] || "Remote";
+        const rawDescription = job.description || job[4] || "";
+        const category = job.category || job[5] || "";
+        const salary = job.salary || job[6] || "";
+        const experience = job.experience || job[7] || "";
+        const source = job.source || job[8] || "";
+        const score = job.score !== undefined ? job.score : job[12] || 0;
 
+        // Badges
+        let badges = `<span class="badge beginner">🟢 Beginner Friendly</span>`;
+        badges += `<span class="badge new">🆕 New</span>`;
 
-    jobs.forEach(job => {
-
-
-
-        // ========================================
-        // Create badges
-        // ========================================
-
-        let badges = "";
-
-
-        // Beginner badge
-        badges += `
-        <span class="badge beginner">
-        🟢 Beginner Friendly
-        </span>
-        `;
-
-
-
-        // New badge
-        badges += `
-        <span class="badge new">
-        🆕 New
-        </span>
-        `;
-
-
-
-        // Salary badge
-        if (
-            job[6] &&
-            job[6] !== "Not specified"
-        ) {
-
-            badges += `
-            <span class="badge salary">
-            💰 Salary Listed
-            </span>
-            `;
-
+        if (salary && salary !== "N/A" && salary !== "Not specified") {
+            badges += `<span class="badge salary">💰 Salary Listed</span>`;
         }
 
-
-
-        // Worldwide badge
         if (
-            job[3] &&
+            location &&
             (
-                job[3].toLowerCase().includes("remote") ||
-                job[3].toLowerCase().includes("world") ||
-                job[3].toLowerCase().includes("anywhere") ||
-                job[3].toLowerCase().includes("global")
+                location.toLowerCase().includes("remote") ||
+                location.toLowerCase().includes("world") ||
+                location.toLowerCase().includes("anywhere") ||
+                location.toLowerCase().includes("global")
             )
         ) {
-
-            badges += `
-            <span class="badge beginner">
-            🌍 Worldwide
-            </span>
-            `;
-
+            badges += `<span class="badge beginner">🌍 Worldwide</span>`;
         }
 
-
-
-
-        // ========================================
-        // Short description
-        // Maximum 50 words
-        // ========================================
-
+        // Short Description (Clean HTML & Cap 50 Words)
         let shortDescription = "";
-
-
-        if (
-            job[4] &&
-            job[4] !== "No description provided"
-        ) {
-
-            let words =
-            job[4].split(" ");
-
-
-            shortDescription =
-            words
-            .slice(0,50)
-            .join(" ");
-
-
-            if(words.length > 50){
-
-                shortDescription += "...";
-
-            }
-
+        if (rawDescription && rawDescription !== "No description provided") {
+            const cleanText = rawDescription.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
+            const words = cleanText.split(" ");
+            shortDescription = words.slice(0, 50).join(" ");
+            if (words.length > 50) shortDescription += "...";
         }
-
-
-
-
-        // ========================================
-        // Create Job Card
-        // ========================================
 
         container.innerHTML += `
-
         <div class="job-card">
-
-
-            ${badges}
-
-
-            <h3>
-                💼 ${job[1]}
-            </h3>
-
-
-
-            ${
-                job[2]
-                ?
-                `<p>🏢 Company: ${job[2]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[3]
-                ?
-                `<p>🌍 Location: ${job[3]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                shortDescription
-                ?
-                `<p>📝 ${shortDescription}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[5]
-                ?
-                `<p>📂 Category: ${job[5]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[6]
-                ?
-                `<p>💰 Salary: ${job[6]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[7]
-                ?
-                `<p>📈 Experience: ${job[7]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[8]
-                ?
-                `<p>🌐 Found by Lomi from: ${job[8]}</p>`
-                :
-                ""
-            }
-
-
-
-            ${
-                job[11]
-                ?
-                `<p>⭐ Lomi Score: ${job[11]}</p>`
-                :
-                ""
-            }
-
-
-
-            <a
-            href="${job[9]}"
-            target="_blank">
-
-                Apply Now
-
-            </a>
-
-
+            <div class="badges-wrapper">${badges}</div>
+            <h3>💼 ${title}</h3>
+            ${company ? `<p>🏢 Company: ${company}</p>` : ""}
+            ${location ? `<p>🌍 Location: ${location}</p>` : ""}
+            ${shortDescription ? `<p>📝 ${shortDescription}</p>` : ""}
+            ${category ? `<p>📂 Category: ${category}</p>` : ""}
+            ${salary ? `<p>💰 Salary: ${salary}</p>` : ""}
+            ${experience ? `<p>📈 Experience: ${experience}</p>` : ""}
+            ${source ? `<p>🌐 Found by Lomi from: ${source}</p>` : ""}
+            ${score ? `<p>⭐ Lomi Score: ${score}</p>` : ""}
+            <a href="/job/${id}">View & Apply</a>
         </div>
-
         `;
-
-
     });
-
-
 }
