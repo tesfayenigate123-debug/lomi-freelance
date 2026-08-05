@@ -7,10 +7,15 @@ const fs = require("fs");
 
 const DB_FILE = "./database/lomi.db";
 
+// In-memory persistent visitor counter variable
+let visitorCount = 1;
+
 // Helper function to save in-memory sql.js state to disk
 function persistDatabase(db) {
     if (db) {
         try {
+            // Update database count column right before disk export
+            db.run("UPDATE visitors SET count = ?", [visitorCount]);
             const data = db.export();
             fs.writeFileSync(DB_FILE, Buffer.from(data));
         } catch (err) {
@@ -51,7 +56,7 @@ const PORT = process.env.PORT || 3000;
 // ========================================
 app.use(express.json());
 
-// Enable CORS so client scripts can fetch without restriction
+// Enable CORS
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -63,20 +68,14 @@ let db;
 
 // ========================================
 // GLOBAL VISITOR COUNTER MIDDLEWARE
-// Counts every user loading the Homepage OR any /job/:id page
-// (Skips background API/static asset requests like /jobs, .css, .js)
+// Increments every time a user visits '/' or '/job/:id'
 // ========================================
 app.use((req, res, next) => {
-    // Only count main HTML page visits (Homepage '/' or single job detail pages '/job/...')
     const isPageVisit = req.path === "/" || req.path.startsWith("/job/");
     
-    if (isPageVisit && db) {
-        try {
-            db.run("UPDATE visitors SET count = count + 1");
-            persistDatabase(db);
-        } catch (err) {
-            console.error("❌ Visitor count update error:", err.message);
-        }
+    if (isPageVisit) {
+        visitorCount += 1;
+        persistDatabase(db);
     }
     next();
 });
@@ -94,17 +93,11 @@ app.get("/", (req, res) => {
 // Visitor count API
 // ========================================
 app.get("/visitors", (req, res) => {
-    try {
-        const result = db.exec("SELECT count FROM visitors");
-        const count = result[0]?.values[0]?.[0] || 0;
-        res.json({ visitors: count });
-    } catch (error) {
-        res.status(500).json({ visitors: 0 });
-    }
+    res.json({ visitors: visitorCount });
 });
 
 // ========================================
-// Get all freelance jobs (Supports /jobs AND /api/jobs)
+// Get all freelance jobs
 // ========================================
 const handleGetJobs = (req, res) => {
     try {
@@ -178,10 +171,6 @@ app.get("/job/:id", (req, res) => {
     }
 
     const job = results[0];
-
-    // Fetch live total visitor count for detail page header display
-    const visitorRes = db.exec("SELECT count FROM visitors");
-    const visitorCount = visitorRes[0]?.values[0]?.[0] || 1;
 
     res.send(`
 <!DOCTYPE html>
@@ -264,6 +253,17 @@ app.get("/job/:id", (req, res) => {
 async function startServer() {
     try {
         db = await initializeDatabase();
+        
+        // Restore initial count value from database state on startup
+        try {
+            const result = db.exec("SELECT count FROM visitors");
+            if (result[0]?.values[0]?.[0]) {
+                visitorCount = result[0].values[0][0];
+            }
+        } catch (e) {
+            console.log("Using initial visitor count baseline.");
+        }
+
         console.log("✅ Database initialized.");
 
         // Start scheduler cron worker
