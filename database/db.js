@@ -1,33 +1,18 @@
-const initSqlJs = require("sql.js");
-const fs = require("fs");
+const Database = require("better-sqlite3");
 const path = require("path");
 
-const DB_PATH = path.join(__dirname, "lomi.db");
+const dbPath = path.join(__dirname, "lomi.db");
+let db;
 
-// Helper to persist in-memory database to disk
-function saveDatabase(db) {
-    if (db) {
-        const data = db.export();
-        fs.writeFileSync(DB_PATH, Buffer.from(data));
-    }
-}
+function initializeDatabase() {
+    db = new Database(dbPath);
+    db.pragma("journal_mode = WAL"); // High-performance concurrent access mode
 
-async function initializeDatabase() {
-    const SQL = await initSqlJs();
-    let db;
-
-    if (fs.existsSync(DB_PATH)) {
-        const filebuffer = fs.readFileSync(DB_PATH);
-        db = new SQL.Database(filebuffer);
-    } else {
-        db = new SQL.Database();
-    }
-
-    // Create tables
-    db.run(`
+    // Create jobs table
+    db.exec(`
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
+            title TEXT NOT NULL,
             company TEXT,
             location TEXT,
             description TEXT,
@@ -38,100 +23,55 @@ async function initializeDatabase() {
             apply_link TEXT UNIQUE,
             posted_date TEXT,
             collected_date TEXT
-        );
+        )
     `);
 
-    db.run(`
+    // Create visitors table
+    db.exec(`
         CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            count INTEGER DEFAULT 0
-        );
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            count INTEGER DEFAULT 1
+        )
     `);
 
     // Initialize visitor row if missing
-    const res = db.exec("SELECT count FROM visitors");
-    if (!res[0] || res[0].values.length === 0) {
-        db.run("INSERT INTO visitors (count) VALUES (1)");
-    }
+    db.exec(`INSERT OR IGNORE INTO visitors (id, count) VALUES (1, 1)`);
 
-    saveDatabase(db);
+    console.log("✅ Native SQLite Database connected successfully.");
     return db;
 }
 
-// ========================================
-// Save single job (Checks for duplicates)
-// ========================================
 function saveJob(db, job) {
-    const applyLink = job.apply_link || job.url;
-    if (!applyLink) return null;
+    try {
+        const stmt = db.prepare(`
+            INSERT INTO jobs (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-    // 1. Check if job already exists by URL
-    const check = db.exec("SELECT id FROM jobs WHERE apply_link = ?", [applyLink]);
-    if (check[0] && check[0].values.length > 0) {
-        // Already exists in DB - Skip
-        return null;
-    }
-
-    // 2. Insert new job
-    const today = new Date().toISOString().slice(0, 10);
-    db.run(
-        `
-        INSERT INTO jobs 
-        (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-            job.title || "Untitled",
-            job.company || "Company",
+        const info = stmt.run(
+            job.title,
+            job.company || "",
             job.location || "Remote",
             job.description || "",
             job.category || "General",
             job.salary || "N/A",
-            job.experience || "Not specified",
-            job.source || "Scraper",
-            applyLink,
-            job.posted_date || today,
-            today
-        ]
-    );
+            job.experience || "Entry Level",
+            job.source || "Manual",
+            job.apply_link,
+            job.posted_date || new Date().toISOString().slice(0, 10),
+            new Date().toISOString().slice(0, 10)
+        );
 
-    saveDatabase(db);
-
-    // Get newly inserted row ID
-    const lastIdRes = db.exec("SELECT MAX(id) FROM jobs");
-    return lastIdRes[0]?.values[0]?.[0] || null;
+        return info.lastInsertRowid; // Auto-generated ID
+    } catch (error) {
+        // Suppress error if link already exists (UNIQUE constraint failure)
+        return null;
+    }
 }
 
-// ========================================
-// Get all jobs for Website Homepage
-// ========================================
 function getJobs(db) {
-    const res = db.exec("SELECT * FROM jobs ORDER BY id DESC LIMIT 50");
-    if (!res[0]) return [];
-
-    const columns = res[0].columns;
-    return res[0].values.map((row) => {
-        const item = {};
-        columns.forEach((col, idx) => {
-            item[col] = row[idx];
-        });
-        return item;
-    });
+    const stmt = db.prepare("SELECT * FROM jobs ORDER BY id DESC");
+    return stmt.all();
 }
 
-// ========================================
-// Delete jobs older than 7 days
-// ========================================
-function deleteExpiredJobs(db) {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    db.run("DELETE FROM jobs WHERE collected_date < ?", [sevenDaysAgo]);
-    saveDatabase(db);
-}
-
-module.exports = {
-    initializeDatabase,
-    saveJob,
-    getJobs,
-    deleteExpiredJobs,
-    saveDatabase
-};
+module.exports = { initializeDatabase, saveJob, getJobs };
