@@ -1,155 +1,103 @@
-// ========================================
-// Global State
-// ========================================
-let allJobs = [];
-
-// ========================================
-// Load Jobs from Express API
-// ========================================
 document.addEventListener("DOMContentLoaded", () => {
     fetchJobs();
-    setupEventListeners();
+    fetchVisitorCount();
 });
 
-function fetchJobs() {
-    fetch("/jobs")
-        .then((response) => response.json())
-        .then((data) => {
-            if (Array.isArray(data)) {
-                allJobs = data;
-            } else if (data && data[0] && data[0].values) {
-                allJobs = data[0].values;
-            } else {
-                allJobs = [];
-            }
-            filterAndDisplayJobs();
-        })
-        .catch((error) => {
-            console.error("Error loading jobs:", error);
-            const container = document.getElementById("jobs-container");
-            if (container) {
-                container.innerHTML = "<p>Failed to load jobs. Please try again later.</p>";
-            }
-        });
-}
-
-// ========================================
-// Event Listeners for Search & Filter
-// ========================================
-function setupEventListeners() {
-    const searchInput = document.getElementById("search");
-    const categorySelect = document.getElementById("category");
-
-    if (searchInput) {
-        searchInput.addEventListener("input", filterAndDisplayJobs);
-    }
-
-    if (categorySelect) {
-        categorySelect.addEventListener("change", filterAndDisplayJobs);
+async function fetchVisitorCount() {
+    try {
+        const res = await fetch("/visitors");
+        const data = await res.json();
+        const visitorElem = document.getElementById("visitor-count");
+        if (visitorElem) {
+            visitorElem.innerText = `👁️ Total Visits: ${data.visitors}`;
+        }
+    } catch (err) {
+        console.error("Failed to load visitor count:", err);
     }
 }
 
-// ========================================
-// Filter Logic
-// ========================================
-function filterAndDisplayJobs() {
-    const searchVal = (document.getElementById("search")?.value || "").toLowerCase().trim();
-    const categoryVal = (document.getElementById("category")?.value || "all").toLowerCase();
+async function fetchJobs() {
+    const jobListElem = document.getElementById("job-list");
+    if (!jobListElem) return;
 
-    const filtered = allJobs.filter((job) => {
-        const title = (job.title || job[1] || "").toLowerCase();
-        const company = (job.company || job[2] || "").toLowerCase();
-        const description = (job.description || job[4] || "").toLowerCase();
-        const category = (job.category || job[5] || "").toLowerCase();
+    try {
+        jobListElem.innerHTML = "<p>Loading fresh remote jobs...</p>";
+        const res = await fetch("/jobs");
+        const jobs = await res.json();
 
-        // 1. Search Query Match
-        const matchesSearch =
-            !searchVal ||
-            title.includes(searchVal) ||
-            company.includes(searchVal) ||
-            description.includes(searchVal);
+        if (jobs.length === 0) {
+            jobListElem.innerHTML = "<p>No jobs available right now. Check back at 12:00 PM!</p>";
+            return;
+        }
 
-        // 2. Category Match
-        const matchesCategory =
-            categoryVal === "all" ||
-            category.includes(categoryVal) ||
-            title.includes(categoryVal);
-
-        return matchesSearch && matchesCategory;
-    });
-
-    displayJobs(filtered);
+        renderJobs(jobs);
+        setupCategoryFilters(jobs);
+    } catch (err) {
+        console.error("Error loading jobs:", err);
+        jobListElem.innerHTML = "<p>Failed to load jobs. Please refresh.</p>";
+    }
 }
 
-// ========================================
-// Render Job Cards
-// ========================================
-function displayJobs(jobs) {
-    const container = document.getElementById("jobs-container");
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    if (!jobs || jobs.length === 0) {
-        container.innerHTML = "<p>No matching remote jobs found.</p>";
-        return;
+function getPaymentBadge(job) {
+    const text = (job.title + " " + job.description + " " + job.salary).toLowerCase();
+    
+    if (text.includes("usd") || text.includes("$") || text.includes("hourly") || text.includes("per year")) {
+        return `<span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">💵 USD / International Pay</span>`;
     }
+    return `<span style="background:#f3f4f6; color:#374151; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">🌐 Remote Verified</span>`;
+}
+
+function getExperienceBadge(exp) {
+    if (exp.toLowerCase().includes("entry") || exp.toLowerCase().includes("junior") || exp === "N/A") {
+        return `<span style="background:#dcfce7; color:#15803d; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">🌱 Beginner Friendly</span>`;
+    }
+    return `<span style="background:#fef3c7; color:#b45309; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">💼 ${exp}</span>`;
+}
+
+function renderJobs(jobs) {
+    const jobListElem = document.getElementById("job-list");
+    jobListElem.innerHTML = "";
 
     jobs.forEach((job) => {
-        const id = job.id || job[0];
-        const title = job.title || job[1] || "Untitled Position";
-        const company = job.company || job[2] || "";
-        const location = job.location || job[3] || "Remote";
-        const rawDescription = job.description || job[4] || "";
-        const category = job.category || job[5] || "";
-        const salary = job.salary || job[6] || "";
-        const experience = job.experience || job[7] || "";
-        const source = job.source || job[8] || "";
-        const score = job.score !== undefined ? job.score : job[12] || 0;
+        const card = document.createElement("div");
+        card.className = "job-card";
+        card.style = "background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px;";
 
-        // Badges
-        let badges = `<span class="badge beginner">🟢 Beginner Friendly</span>`;
-        badges += `<span class="badge new">🆕 New</span>`;
-
-        if (salary && salary !== "N/A" && salary !== "Not specified") {
-            badges += `<span class="badge salary">💰 Salary Listed</span>`;
-        }
-
-        if (
-            location &&
-            (
-                location.toLowerCase().includes("remote") ||
-                location.toLowerCase().includes("world") ||
-                location.toLowerCase().includes("anywhere") ||
-                location.toLowerCase().includes("global")
-            )
-        ) {
-            badges += `<span class="badge beginner">🌍 Worldwide</span>`;
-        }
-
-        // Short Description (Clean HTML & Cap 50 Words)
-        let shortDescription = "";
-        if (rawDescription && rawDescription !== "No description provided") {
-            const cleanText = rawDescription.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
-            const words = cleanText.split(" ");
-            shortDescription = words.slice(0, 50).join(" ");
-            if (words.length > 50) shortDescription += "...";
-        }
-
-        container.innerHTML += `
-        <div class="job-card">
-            <div class="badges-wrapper">${badges}</div>
-            <h3>💼 ${title}</h3>
-            ${company ? `<p>🏢 Company: ${company}</p>` : ""}
-            ${location ? `<p>🌍 Location: ${location}</p>` : ""}
-            ${shortDescription ? `<p>📝 ${shortDescription}</p>` : ""}
-            ${category ? `<p>📂 Category: ${category}</p>` : ""}
-            ${salary ? `<p>💰 Salary: ${salary}</p>` : ""}
-            ${experience ? `<p>📈 Experience: ${experience}</p>` : ""}
-            ${source ? `<p>🌐 Found by Lomi from: ${source}</p>` : ""}
-            ${score ? `<p>⭐ Lomi Score: ${score}</p>` : ""}
-            <a href="/job/${id}">View & Apply</a>
-        </div>
+        card.innerHTML = `
+            <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                ${getExperienceBadge(job.experience || "Entry Level")}
+                ${getPaymentBadge(job)}
+            </div>
+            <h3 style="margin:4px 0 8px 0; font-size:18px;">${job.title}</h3>
+            <p style="color:#4b5563; font-size:14px; margin:0 0 12px 0;">🏢 <strong>${job.company || "Remote Company"}</strong> | 📂 ${job.category || "General"}</p>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <a href="/job/${job.id}" style="background:#000; color:#fff; text-decoration:none; padding:8px 16px; border-radius:6px; font-size:14px; font-weight:500;">View Details & Apply ↗</a>
+                <a href="https://t.me/YOUR_TELEGRAM_CHANNEL" target="_blank" style="background:#229ED9; color:#fff; text-decoration:none; padding:8px 16px; border-radius:6px; font-size:14px; font-weight:500;">Get Alerts on Telegram ✈️</a>
+            </div>
         `;
+        jobListElem.appendChild(card);
     });
+}
+
+function setupCategoryFilters(allJobs) {
+    const filterContainer = document.getElementById("category-filters");
+    if (!filterContainer) return;
+
+    filterContainer.innerHTML = `
+        <button onclick="window.filterCategory('all')" class="filter-btn">All Jobs</button>
+        <button onclick="window.filterCategory('beginner')" class="filter-btn">🌱 Beginner Friendly</button>
+        <button onclick="window.filterCategory('usd')" class="filter-btn">💵 USD Currency</button>
+    `;
+
+    window.filterCategory = (type) => {
+        if (type === "all") {
+            renderJobs(allJobs);
+        } else if (type === "beginner") {
+            const filtered = allJobs.filter((j) => (j.experience || "").toLowerCase().includes("entry") || (j.experience || "").toLowerCase().includes("junior"));
+            renderJobs(filtered.length ? filtered : allJobs);
+        } else if (type === "usd") {
+            const filtered = allJobs.filter((j) => (j.title + j.salary + j.description).toLowerCase().includes("usd") || (j.title + j.salary).includes("$"));
+            renderJobs(filtered.length ? filtered : allJobs);
+        }
+    };
 }
