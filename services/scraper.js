@@ -1,4 +1,3 @@
-// services/scraper.js (or wherever your fetchJobs resides)
 const fetchRemotiveJobs = require("./sources/remotive");
 const fetchHimalayasJobs = require("./sources/himalayas");
 const fetchJobicyJobs = require("./sources/jobicy");
@@ -6,7 +5,7 @@ const fetchJobicyJobs = require("./sources/jobicy");
 const scoreJob = require("./jobScorer");
 const analyzeJob = require("./jobAnalyzer");
 
-async function fetchJobs() {
+async function fetchJobs(db) {
     console.log("🔍 Scraping remote jobs across sources...");
 
     const results = await Promise.allSettled([
@@ -21,14 +20,22 @@ async function fetchJobs() {
 
     let allJobs = [...remotive, ...himalayas, ...jobicy];
 
-    // Remove duplicates from raw scrape list
+    // 1. Remove raw scrape duplicate links
     allJobs = allJobs.filter(
         (job, index, self) =>
             job.apply_link &&
             index === self.findIndex((j) => j.apply_link === job.apply_link)
     );
 
-    // Score and analyze
+    // 2. Filter out jobs that ALREADY exist in your database
+    if (db) {
+        allJobs = allJobs.filter((job) => {
+            const check = db.exec("SELECT id FROM jobs WHERE apply_link = ?", [job.apply_link]);
+            return !check[0] || check[0].values.length === 0;
+        });
+    }
+
+    // 3. Score and analyze remaining UNSEEN jobs
     allJobs = allJobs.map((job) => {
         const result = scoreJob(job);
         job.score = result.score;
@@ -42,16 +49,23 @@ async function fetchJobs() {
         return job;
     });
 
-    // Keep high quality jobs (score > 35 according to Lomi quality rules)
-    allJobs = allJobs.filter((job) => job.score > 35);
-
-    // Sort by highest score first
+    // 4. Sort by highest quality score
     allJobs.sort((a, b) => b.score - a.score);
 
-    console.log(`✅ Total qualified Lomi jobs: ${allJobs.length}. Returning top 15.`);
+    // Primary Tier: Strict quality (Score > 35)
+    let qualifiedJobs = allJobs.filter((job) => job.score > 35);
 
-    // Strictly limit output to top 15 jobs
-    return allJobs.slice(0, 15);
+    // Fallback Tier: If high-quality jobs are under 5, lower threshold (Score > 20) to ensure at least 5 jobs
+    if (qualifiedJobs.length < 5) {
+        console.log(`⚠️ Only ${qualifiedJobs.length} top-tier new jobs found. Applying fallback threshold to meet minimum of 5...`);
+        qualifiedJobs = allJobs.filter((job) => job.score > 20);
+    }
+
+    // Return between 5 and 15 strictly NEW jobs
+    const finalSelection = qualifiedJobs.slice(0, 15);
+    console.log(`✅ Selected ${finalSelection.length} new jobs for posting.`);
+    
+    return finalSelection;
 }
 
 module.exports = fetchJobs;
