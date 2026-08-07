@@ -23,18 +23,23 @@ async function fetchJobs(db) {
 
     let allJobs = [...remotive, ...himalayas, ...jobicy, ...weworkremotely];
 
-    // 1. Remove raw scrape duplicate links
+    // 1. Remove duplicate links within the raw scrape
     allJobs = allJobs.filter(
         (job, index, self) =>
             job.apply_link &&
             index === self.findIndex((j) => j.apply_link === job.apply_link)
     );
 
-    // 2. Filter out jobs that ALREADY exist in your better-sqlite3 database
+    // 2. Filter out jobs that ALREADY exist in your database
     if (db) {
         allJobs = allJobs.filter((job) => {
-            const existing = db.prepare("SELECT id FROM jobs WHERE apply_link = ?").get(job.apply_link);
-            return !existing;
+            try {
+                const escapedLink = job.apply_link.replace(/'/g, "''");
+                const res = db.exec(`SELECT id FROM jobs WHERE apply_link = '${escapedLink}'`);
+                return !(res.length > 0 && res[0].values.length > 0);
+            } catch (err) {
+                return true;
+            }
         });
     }
 
@@ -55,10 +60,9 @@ async function fetchJobs(db) {
     // 4. Sort by highest quality score
     allJobs.sort((a, b) => b.score - a.score);
 
-    // Primary Selection (Score > 35)
+    // Filter by threshold
     let qualifiedJobs = allJobs.filter((job) => job.score > 35);
 
-    // Fallback Selection (Score > 20)
     if (qualifiedJobs.length < 5) {
         console.log(`⚠️ Only ${qualifiedJobs.length} top-tier jobs found. Adjusting threshold...`);
         qualifiedJobs = allJobs.filter((job) => job.score > 20);

@@ -1,5 +1,6 @@
 const express = require("express");
-const { initializeDatabase, getJobs } = require("./database/db");
+const { initializeDatabase, getJobs, saveToDisk } = require("./database/db");
+const startScheduler = require("./scheduler/dailyJobs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,13 +14,18 @@ app.use((req, res, next) => {
     next();
 });
 
-let db;
+let db = null;
 
 // Visitor tracking middleware
 app.use((req, res, next) => {
     const isPageVisit = req.path === "/" || req.path.startsWith("/job/");
     if (isPageVisit && db) {
-        db.prepare("UPDATE visitors SET count = count + 1 WHERE id = 1").run();
+        try {
+            db.run("UPDATE visitors SET count = count + 1 WHERE id = 1");
+            saveToDisk(db);
+        } catch (err) {
+            console.error("Visitor count error:", err.message);
+        }
     }
     next();
 });
@@ -32,12 +38,19 @@ app.get("/", (req, res) => {
 
 // Get total visitor count
 app.get("/visitors", (req, res) => {
-    const row = db.prepare("SELECT count FROM visitors WHERE id = 1").get();
-    res.json({ visitors: row ? row.count : 1 });
+    if (!db) return res.json({ visitors: 1 });
+    try {
+        const resDb = db.exec("SELECT count FROM visitors WHERE id = 1");
+        const count = resDb[0]?.values[0]?.[0] || 1;
+        res.json({ visitors: count });
+    } catch (err) {
+        res.json({ visitors: 1 });
+    }
 });
 
 // Fetch all jobs
 app.get("/jobs", (req, res) => {
+    if (!db) return res.json([]);
     try {
         const jobs = getJobs(db);
         res.json(jobs);
@@ -48,16 +61,21 @@ app.get("/jobs", (req, res) => {
 
 // Single job page route
 app.get("/job/:id", (req, res) => {
+    if (!db) return res.status(500).send("Database not ready");
     const id = Number(req.params.id);
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(id);
+    
+    try {
+        const jobs = getJobs(db);
+        const job = jobs.find((j) => j.id === id);
 
-    if (!job) {
-        return res.status(404).send("<h2>Job Not Found</h2><a href='/'>Back to Jobs</a>");
-    }
+        if (!job) {
+            return res.status(404).send("<h2>Job Not Found</h2><a href='/'>Back to Jobs</a>");
+        }
 
-    const visitorRow = db.prepare("SELECT count FROM visitors WHERE id = 1").get();
+        const resDb = db.exec("SELECT count FROM visitors WHERE id = 1");
+        const visitorCount = resDb[0]?.values[0]?.[0] || 1;
 
-    res.send(`
+        res.send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -73,7 +91,7 @@ app.get("/job/:id", (req, res) => {
 </head>
 <body>
     <div class="job-card">
-        <div class="badge">👁️ Total Website Visits: ${visitorRow ? visitorRow.count : 1}</div>
+        <div class="badge">👁️ Total Website Visits: ${visitorCount}</div>
         <h1>💼 ${job.title}</h1>
         <p>🏢 <strong>Company:</strong> ${job.company || "N/A"}</p>
         <p>📂 <strong>Category:</strong> ${job.category || "General"}</p>
@@ -83,16 +101,17 @@ app.get("/job/:id", (req, res) => {
     </div>
 </body>
 </html>
-    `);
+        `);
+    } catch (err) {
+        res.status(500).send("Error rendering job details");
+    }
 });
 
 // Start Server
 async function startServer() {
     try {
-        db = initializeDatabase();
-
-        // Start scheduler
-        require("./scheduler/dailyJobs")(db);
+        db = await initializeDatabase();
+        startScheduler(db);
 
         app.listen(PORT, "0.0.0.0", () => {
             console.log(`🚀 Server running on port ${PORT}`);
@@ -104,4 +123,3 @@ async function startServer() {
 }
 
 startServer();
-

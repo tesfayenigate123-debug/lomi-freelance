@@ -1,41 +1,42 @@
 const cron = require("node-cron");
 const fetchJobs = require("../services/scraper");
-const { saveJob } = require("../database/db");
+const { saveJob, saveToDisk } = require("../database/db");
 const sendTelegramAlert = require("../services/telegram");
 
-module.exports = function initScheduler(db) {
-    // Force cron to trigger daily at 12:10 PM East Africa Time
+module.exports = function startScheduler(db) {
+    if (!db) {
+        console.error("❌ Scheduler failed: Database instance is missing!");
+        return;
+    }
+
+    // Schedule task daily at 12:10 PM East Africa Time
     cron.schedule(
         "10 12 * * *",
         async () => {
             console.log("⏰ [12:10 PM EAT] Starting scheduled job collection...");
 
             try {
-                // 1. Scrape new jobs across all sources
+                // 1. Scrape new jobs across sources
                 const jobs = await fetchJobs(db);
                 let addedCount = 0;
 
-                // 2. Save each job to SQLite and dispatch Telegram alerts
+                // 2. Insert into SQLite and dispatch Telegram notifications
                 for (const job of jobs) {
                     const insertedId = saveJob(db, job);
                     if (insertedId) {
                         addedCount++;
-                        // Pass unique database primary key to Telegram
                         await sendTelegramAlert(job, insertedId);
                     }
                 }
 
+                saveToDisk(db);
                 console.log(`✅ Daily execution finished: ${addedCount} NEW jobs added.`);
 
-                // 3. Purge jobs older than 30 days to keep database lightweight
+                // 3. Purge jobs older than 30 days
                 try {
-                    const deleted = db.prepare(
-                        "DELETE FROM jobs WHERE datetime(collected_date) < datetime('now', '-30 days')"
-                    ).run();
-
-                    if (deleted.changes > 0) {
-                        console.log(`🧹 Auto-cleaned ${deleted.changes} old job listings from database.`);
-                    }
+                    db.run("DELETE FROM jobs WHERE datetime(collected_date) < datetime('now', '-30 days')");
+                    saveToDisk(db);
+                    console.log("🧹 Auto-cleaned old job listings from database.");
                 } catch (purgeError) {
                     console.error("❌ Database auto-cleanup error:", purgeError.message);
                 }

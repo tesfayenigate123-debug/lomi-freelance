@@ -1,15 +1,21 @@
-const Database = require("better-sqlite3");
+const initSqlJs = require("sql.js");
+const fs = require("fs");
 const path = require("path");
 
 const dbPath = path.join(__dirname, "lomi.db");
-let db;
 
-function initializeDatabase() {
-    db = new Database(dbPath);
-    db.pragma("journal_mode = WAL"); // High-performance concurrent access mode
+async function initializeDatabase() {
+    const SQL = await initSqlJs();
+    let dbInstance;
 
-    // Create jobs table
-    db.exec(`
+    if (fs.existsSync(dbPath)) {
+        const fileBuffer = fs.readFileSync(dbPath);
+        dbInstance = new SQL.Database(fileBuffer);
+    } else {
+        dbInstance = new SQL.Database();
+    }
+
+    dbInstance.run(`
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -23,55 +29,76 @@ function initializeDatabase() {
             apply_link TEXT UNIQUE,
             posted_date TEXT,
             collected_date TEXT
-        )
-    `);
-
-    // Create visitors table
-    db.exec(`
+        );
         CREATE TABLE IF NOT EXISTS visitors (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             count INTEGER DEFAULT 1
-        )
+        );
+        INSERT OR IGNORE INTO visitors (id, count) VALUES (1, 1);
     `);
 
-    // Initialize visitor row if missing
-    db.exec(`INSERT OR IGNORE INTO visitors (id, count) VALUES (1, 1)`);
+    saveToDisk(dbInstance);
+    console.log("✅ Pure JS SQLite (sql.js) Database loaded successfully.");
+    return dbInstance;
+}
 
-    console.log("✅ Native SQLite Database connected successfully.");
-    return db;
+function saveToDisk(db) {
+    if (!db) return;
+    try {
+        const data = db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(dbPath, buffer);
+    } catch (err) {
+        console.error("❌ Database disk save failed:", err.message);
+    }
 }
 
 function saveJob(db, job) {
+    if (!db) return null;
     try {
-        const stmt = db.prepare(`
-            INSERT INTO jobs (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const info = stmt.run(
-            job.title,
-            job.company || "",
-            job.location || "Remote",
-            job.description || "",
-            job.category || "General",
-            job.salary || "N/A",
-            job.experience || "Entry Level",
-            job.source || "Manual",
-            job.apply_link,
-            job.posted_date || new Date().toISOString().slice(0, 10),
-            new Date().toISOString().slice(0, 10)
+        db.run(
+            `INSERT INTO jobs (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                job.title,
+                job.company || "",
+                job.location || "Remote",
+                job.description || "",
+                job.category || "General",
+                job.salary || "N/A",
+                job.experience || "Entry Level",
+                job.source || "Manual",
+                job.apply_link,
+                job.posted_date || new Date().toISOString().slice(0, 10),
+                new Date().toISOString().slice(0, 10)
+            ]
         );
 
-        return info.lastInsertRowid; // Auto-generated ID
+        const res = db.exec("SELECT last_insert_rowid() AS id");
+        const newId = res[0]?.values[0]?.[0] || null;
+        saveToDisk(db);
+        return newId;
     } catch (error) {
-        // Suppress error if link already exists (UNIQUE constraint failure)
         return null;
     }
 }
 
 function getJobs(db) {
-    const stmt = db.prepare("SELECT * FROM jobs ORDER BY id DESC");
-    return stmt.all();
+    if (!db) return [];
+    try {
+        const res = db.exec("SELECT * FROM jobs ORDER BY id DESC");
+        if (!res.length) return [];
+        const columns = res[0].columns;
+        return res[0].values.map((row) => {
+            const obj = {};
+            columns.forEach((col, idx) => {
+                obj[col] = row[idx];
+            });
+            return obj;
+        });
+    } catch (err) {
+        return [];
+    }
 }
 
-module.exports = { initializeDatabase, saveJob, getJobs };
+module.exports = { initializeDatabase, saveJob, getJobs, saveToDisk };
