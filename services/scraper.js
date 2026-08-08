@@ -1,27 +1,24 @@
 const fetchRemotiveJobs = require("./sources/remotive");
 const fetchHimalayasJobs = require("./sources/himalayas");
 const fetchJobicyJobs = require("./sources/jobicy");
-const fetchWeWorkRemotelyJobs = require("./sources/weworkremotely");
 
 const scoreJob = require("./jobScorer");
 const analyzeJob = require("./jobAnalyzer");
 
 async function fetchJobs(db) {
-    console.log("🔍 Scraping remote jobs across sources...");
+    console.log("🔍 Scraping remote jobs across free sources...");
 
     const results = await Promise.allSettled([
         fetchRemotiveJobs(),
         fetchHimalayasJobs(),
-        fetchJobicyJobs(),
-        fetchWeWorkRemotelyJobs()
+        fetchJobicyJobs()
     ]);
 
     const remotive = results[0].status === "fulfilled" ? results[0].value : [];
     const himalayas = results[1].status === "fulfilled" ? results[1].value : [];
     const jobicy = results[2].status === "fulfilled" ? results[2].value : [];
-    const weworkremotely = results[3].status === "fulfilled" ? results[3].value : [];
 
-    let allJobs = [...remotive, ...himalayas, ...jobicy, ...weworkremotely];
+    let allJobs = [...remotive, ...himalayas, ...jobicy];
 
     // 1. Remove duplicate links within the raw scrape
     allJobs = allJobs.filter(
@@ -60,7 +57,7 @@ async function fetchJobs(db) {
     // 4. Sort by highest quality score
     allJobs.sort((a, b) => b.score - a.score);
 
-    // Filter by threshold
+    // Filter by quality threshold
     let qualifiedJobs = allJobs.filter((job) => job.score > 35);
 
     if (qualifiedJobs.length < 5) {
