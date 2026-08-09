@@ -1,18 +1,18 @@
 document.addEventListener("DOMContentLoaded", () => {
     fetchJobs();
-    fetchVisitorCount();
+    fetchStats();
 });
 
-async function fetchVisitorCount() {
+async function fetchStats() {
     try {
-        const res = await fetch("/visitors");
+        const res = await fetch("/stats");
         const data = await res.json();
         const visitorElem = document.getElementById("visitor-count");
         if (visitorElem) {
-            visitorElem.innerText = `👁️ Total Visits: ${data.visitors}`;
+            visitorElem.innerText = `💼 Total Jobs Available: ${data.totalJobs} | 👁️ Total Visits: ${data.visitors}`;
         }
     } catch (err) {
-        console.error("Failed to load visitor count:", err);
+        console.error("Failed to load stats:", err);
     }
 }
 
@@ -25,8 +25,8 @@ async function fetchJobs() {
         const res = await fetch("/jobs");
         const jobs = await res.json();
 
-        if (jobs.length === 0) {
-            jobListElem.innerHTML = "<p>No jobs available right now. Check back at 12:00 PM!</p>";
+        if (!Array.isArray(jobs) || jobs.length === 0) {
+            jobListElem.innerHTML = "<p>No jobs available right now. Check back at 12:10 PM!</p>";
             return;
         }
 
@@ -39,7 +39,7 @@ async function fetchJobs() {
 }
 
 function getPaymentBadge(job) {
-    const text = (job.title + " " + job.description + " " + job.salary).toLowerCase();
+    const text = (job.title + " " + (job.description || "") + " " + (job.salary || "")).toLowerCase();
     
     if (text.includes("usd") || text.includes("$") || text.includes("hourly") || text.includes("per year")) {
         return `<span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">💵 USD / International Pay</span>`;
@@ -48,7 +48,8 @@ function getPaymentBadge(job) {
 }
 
 function getExperienceBadge(exp) {
-    if (exp.toLowerCase().includes("entry") || exp.toLowerCase().includes("junior") || exp === "N/A") {
+    const str = (exp || "").toLowerCase();
+    if (str.includes("entry") || str.includes("junior") || str === "n/a") {
         return `<span style="background:#dcfce7; color:#15803d; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">🌱 Beginner Friendly</span>`;
     }
     return `<span style="background:#fef3c7; color:#b45309; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;">💼 ${exp}</span>`;
@@ -65,14 +66,13 @@ function renderJobs(jobs) {
 
         card.innerHTML = `
             <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
-                ${getExperienceBadge(job.experience || "Entry Level")}
+                ${getExperienceBadge(job.experience)}
                 ${getPaymentBadge(job)}
             </div>
             <h3 style="margin:4px 0 8px 0; font-size:18px;">${job.title}</h3>
             <p style="color:#4b5563; font-size:14px; margin:0 0 12px 0;">🏢 <strong>${job.company || "Remote Company"}</strong> | 📂 ${job.category || "General"}</p>
             <div style="display:flex; gap:10px; align-items:center;">
                 <a href="/job/${job.id}" style="background:#000; color:#fff; text-decoration:none; padding:8px 16px; border-radius:6px; font-size:14px; font-weight:500;">View Details & Apply ↗</a>
-                <a href="https://t.me/YOUR_TELEGRAM_CHANNEL" target="_blank" style="background:#229ED9; color:#fff; text-decoration:none; padding:8px 16px; border-radius:6px; font-size:14px; font-weight:500;">Get Alerts on Telegram ✈️</a>
             </div>
         `;
         jobListElem.appendChild(card);
@@ -96,7 +96,7 @@ function setupCategoryFilters(allJobs) {
             const filtered = allJobs.filter((j) => (j.experience || "").toLowerCase().includes("entry") || (j.experience || "").toLowerCase().includes("junior"));
             renderJobs(filtered.length ? filtered : allJobs);
         } else if (type === "usd") {
-            const filtered = allJobs.filter((j) => (j.title + j.salary + j.description).toLowerCase().includes("usd") || (j.title + j.salary).includes("$"));
+            const filtered = allJobs.filter((j) => (j.title + (j.salary || "") + (j.description || "")).toLowerCase().includes("usd") || (j.title + (j.salary || "")).includes("$"));
             renderJobs(filtered.length ? filtered : allJobs);
         }
     };

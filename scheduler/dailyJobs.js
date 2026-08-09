@@ -11,7 +11,7 @@ module.exports = function startScheduler(db) {
 
     // Schedule task daily at 12:10 PM East Africa Time
     cron.schedule(
-        "10 12 * * *",
+        "29 03 * * *",
         async () => {
             console.log("⏰ [12:10 PM EAT] Starting scheduled job collection...");
 

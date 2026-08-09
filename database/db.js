@@ -3,14 +3,30 @@ const fs = require("fs");
 const path = require("path");
 
 const dbPath = path.join(__dirname, "lomi.db");
+let dbInstance = null;
+
+function saveToDisk(db) {
+    if (!db) return;
+    try {
+        const data = db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(dbPath, buffer);
+    } catch (err) {
+        console.error("❌ Disk save failed:", err.message);
+    }
+}
 
 async function initializeDatabase() {
     const SQL = await initSqlJs();
-    let dbInstance;
 
     if (fs.existsSync(dbPath)) {
-        const fileBuffer = fs.readFileSync(dbPath);
-        dbInstance = new SQL.Database(fileBuffer);
+        try {
+            const fileBuffer = fs.readFileSync(dbPath);
+            dbInstance = new SQL.Database(fileBuffer);
+            console.log("📂 Loaded existing lomi.db file from disk.");
+        } catch (e) {
+            dbInstance = new SQL.Database();
+        }
     } else {
         dbInstance = new SQL.Database();
     }
@@ -38,19 +54,8 @@ async function initializeDatabase() {
     `);
 
     saveToDisk(dbInstance);
-    console.log("✅ Pure JS SQLite (sql.js) Database loaded successfully.");
+    console.log("✅ Pure JS SQLite (sql.js) initialized and verified.");
     return dbInstance;
-}
-
-function saveToDisk(db) {
-    if (!db) return;
-    try {
-        const data = db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(dbPath, buffer);
-    } catch (err) {
-        console.error("❌ Database disk save failed:", err.message);
-    }
 }
 
 function saveJob(db, job) {
@@ -76,9 +81,10 @@ function saveJob(db, job) {
 
         const res = db.exec("SELECT last_insert_rowid() AS id");
         const newId = res[0]?.values[0]?.[0] || null;
-        saveToDisk(db);
+        saveToDisk(db); // Save to disk immediately so new IDs are permanent
         return newId;
     } catch (error) {
+        // Suppress duplicate URL insertion errors
         return null;
     }
 }
@@ -87,7 +93,7 @@ function getJobs(db) {
     if (!db) return [];
     try {
         const res = db.exec("SELECT * FROM jobs ORDER BY id DESC");
-        if (!res.length) return [];
+        if (!res || !res.length) return [];
         const columns = res[0].columns;
         return res[0].values.map((row) => {
             const obj = {};
@@ -97,6 +103,7 @@ function getJobs(db) {
             return obj;
         });
     } catch (err) {
+        console.error("Error running getJobs:", err.message);
         return [];
     }
 }

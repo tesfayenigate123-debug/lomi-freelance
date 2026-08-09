@@ -36,19 +36,23 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/client/index.html");
 });
 
-// Get total visitor count
-app.get("/visitors", (req, res) => {
-    if (!db) return res.json({ visitors: 1 });
+// Endpoint to display live stats
+app.get("/stats", (req, res) => {
+    if (!db) return res.json({ totalJobs: 0, visitors: 1 });
     try {
-        const resDb = db.exec("SELECT count FROM visitors WHERE id = 1");
-        const count = resDb[0]?.values[0]?.[0] || 1;
-        res.json({ visitors: count });
+        const jobRes = db.exec("SELECT COUNT(*) FROM jobs");
+        const totalJobs = jobRes[0]?.values[0]?.[0] || 0;
+
+        const visRes = db.exec("SELECT count FROM visitors WHERE id = 1");
+        const visitors = visRes[0]?.values[0]?.[0] || 1;
+
+        res.json({ totalJobs, visitors });
     } catch (err) {
-        res.json({ visitors: 1 });
+        res.json({ totalJobs: 0, visitors: 1 });
     }
 });
 
-// Fetch all jobs
+// Fetch all jobs for main page
 app.get("/jobs", (req, res) => {
     if (!db) return res.json([]);
     try {
@@ -63,7 +67,7 @@ app.get("/jobs", (req, res) => {
 app.get("/job/:id", (req, res) => {
     if (!db) return res.status(500).send("Database not ready");
     const id = Number(req.params.id);
-    
+
     try {
         const jobs = getJobs(db);
         const job = jobs.find((j) => j.id === id);
@@ -72,8 +76,8 @@ app.get("/job/:id", (req, res) => {
             return res.status(404).send("<h2>Job Not Found</h2><a href='/'>Back to Jobs</a>");
         }
 
-        const resDb = db.exec("SELECT count FROM visitors WHERE id = 1");
-        const visitorCount = resDb[0]?.values[0]?.[0] || 1;
+        const visRes = db.exec("SELECT count FROM visitors WHERE id = 1");
+        const visitorCount = visRes[0]?.values[0]?.[0] || 1;
 
         res.send(`
 <!DOCTYPE html>
@@ -91,7 +95,7 @@ app.get("/job/:id", (req, res) => {
 </head>
 <body>
     <div class="job-card">
-        <div class="badge">👁️ Total Website Visits: ${visitorCount}</div>
+        <div class="badge">👁️ Total Visits: ${visitorCount}</div>
         <h1>💼 ${job.title}</h1>
         <p>🏢 <strong>Company:</strong> ${job.company || "N/A"}</p>
         <p>📂 <strong>Category:</strong> ${job.category || "General"}</p>
@@ -107,7 +111,6 @@ app.get("/job/:id", (req, res) => {
     }
 });
 
-// Start Server
 async function startServer() {
     try {
         db = await initializeDatabase();
