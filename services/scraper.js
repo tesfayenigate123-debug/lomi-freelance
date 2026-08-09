@@ -5,8 +5,9 @@ const fetchArbeitnowJobs = require("./sources/arbeitnow");
 
 const scoreJob = require("./jobScorer");
 const analyzeJob = require("./jobAnalyzer");
+const { pool } = require("../database/db");
 
-async function fetchJobs(db) {
+async function fetchJobs() {
     console.log("🔍 Scraping remote jobs across free sources...");
 
     const results = await Promise.allSettled([
@@ -30,19 +31,10 @@ async function fetchJobs(db) {
             index === self.findIndex((j) => j.apply_link === job.apply_link)
     );
 
-    // 2. Remove jobs that ALREADY exist in lomi.db
-    if (db) {
-        allJobs = allJobs.filter((job) => {
-            try {
-                const escapedLink = job.apply_link.replace(/'/g, "''");
-                const res = db.exec(`SELECT id FROM jobs WHERE apply_link = '${escapedLink}'`);
-                const exists = res.length > 0 && res[0].values && res[0].values.length > 0;
-                return !exists; // Keep ONLY if missing in database
-            } catch (err) {
-                return true;
-            }
-        });
-    }
+    // 2. Remove jobs that ALREADY exist in PostgreSQL
+    const existingLinksRes = await pool.query("SELECT apply_link FROM jobs");
+    const existingLinks = new Set(existingLinksRes.rows.map((r) => r.apply_link));
+    allJobs = allJobs.filter((job) => !existingLinks.has(job.apply_link));
 
     // 3. Score & analyze unseen jobs
     allJobs = allJobs.map((job) => {
@@ -58,13 +50,10 @@ async function fetchJobs(db) {
         return job;
     });
 
-    // 4. Sort by highest quality score
     allJobs.sort((a, b) => b.score - a.score);
 
     let qualifiedJobs = allJobs.filter((job) => job.score > 35);
-
     if (qualifiedJobs.length < 5) {
-        console.log(`⚠️ Only ${qualifiedJobs.length} top-tier jobs found. Lowering threshold...`);
         qualifiedJobs = allJobs.filter((job) => job.score > 20);
     }
 

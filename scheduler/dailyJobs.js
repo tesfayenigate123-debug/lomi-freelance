@@ -1,55 +1,29 @@
 const cron = require("node-cron");
 const fetchJobs = require("../services/scraper");
-const { saveJob, saveToDisk } = require("../database/db");
-const sendTelegramAlert = require("../services/telegram");
+const { saveJob, pool } = require("../database/db");
 
-module.exports = function startScheduler(db) {
-    if (!db) {
-        console.error("❌ Scheduler failed: Database instance is missing!");
-        return;
-    }
+function startScheduler() {
+    // Schedule scraper for 12:10 PM EAT daily (09:10 UTC)
+    cron.schedule("53 4 * * *", async () => {
+        console.log("⏰ Running scheduled daily job scrape...");
+        try {
+            const newJobs = await fetchJobs();
+            let addedCount = 0;
 
-    // Schedule task daily at 12:10 PM East Africa Time
-    cron.schedule(
-        "33 04 * * *",
-        async () => {
-            console.log("⏰ [12:10 PM EAT] Starting scheduled job collection...");
-
-            try {
-                // 1. Scrape new jobs across sources
-                const jobs = await fetchJobs(db);
-                let addedCount = 0;
-
-                // 2. Insert into SQLite and dispatch Telegram notifications
-                for (const job of jobs) {
-                    const insertedId = saveJob(db, job);
-                    if (insertedId) {
-                        addedCount++;
-                        await sendTelegramAlert(job, insertedId);
-                    }
-                }
-
-                saveToDisk(db);
-                console.log(`✅ Daily execution finished: ${addedCount} NEW jobs added.`);
-
-                // 3. Purge jobs older than 30 days
-                try {
-                    db.run("DELETE FROM jobs WHERE datetime(collected_date) < datetime('now', '-30 days')");
-                    saveToDisk(db);
-                    console.log("🧹 Auto-cleaned old job listings from database.");
-                } catch (purgeError) {
-                    console.error("❌ Database auto-cleanup error:", purgeError.message);
-                }
-
-            } catch (error) {
-                console.error("❌ Scheduled collection error:", error.message);
+            for (const job of newJobs) {
+                const insertedId = await saveJob(job);
+                if (insertedId) addedCount++;
             }
-        },
-        {
-            scheduled: true,
-            timezone: "Africa/Addis_Ababa"
-        }
-    );
 
-    console.log("📅 Cron job successfully scheduled for 12:10 PM (Africa/Addis_Ababa) daily.");
-};
+            // Cleanup listings older than 30 days
+            await pool.query("DELETE FROM jobs WHERE collected_date < CURRENT_DATE - INTERVAL '30 days'");
+            console.log(`✅ Daily job run completed: ${addedCount} new jobs saved.`);
+        } catch (error) {
+            console.error("❌ Scheduler execution failed:", error.message);
+        }
+    });
+
+    console.log("📅 Daily cron job scheduled for 12:10 PM EAT.");
+}
+
+module.exports = startScheduler;
