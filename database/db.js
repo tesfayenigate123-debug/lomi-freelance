@@ -2,7 +2,13 @@ const initSqlJs = require("sql.js");
 const fs = require("fs");
 const path = require("path");
 
-const dbPath = path.join(__dirname, "lomi.db");
+// Dedicated volume directory to avoid overwriting application code
+const dataDir = path.join(__dirname, "../data");
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const dbPath = path.join(dataDir, "lomi.db");
 let dbInstance = null;
 
 function saveToDisk(db) {
@@ -23,8 +29,9 @@ async function initializeDatabase() {
         try {
             const fileBuffer = fs.readFileSync(dbPath);
             dbInstance = new SQL.Database(fileBuffer);
-            console.log("📂 Loaded existing lomi.db file from disk.");
+            console.log("📂 Loaded existing lomi.db file from volume storage.");
         } catch (e) {
+            console.error("⚠️ Failed to load disk image, initializing new DB instance:", e.message);
             dbInstance = new SQL.Database();
         }
     } else {
@@ -54,7 +61,7 @@ async function initializeDatabase() {
     `);
 
     saveToDisk(dbInstance);
-    console.log("✅ Pure JS SQLite (sql.js) initialized and verified.");
+    console.log("✅ Pure JS SQLite (sql.js) initialized successfully.");
     return dbInstance;
 }
 
@@ -81,10 +88,9 @@ function saveJob(db, job) {
 
         const res = db.exec("SELECT last_insert_rowid() AS id");
         const newId = res[0]?.values[0]?.[0] || null;
-        saveToDisk(db); // Save to disk immediately so new IDs are permanent
+        saveToDisk(db);
         return newId;
     } catch (error) {
-        // Suppress duplicate URL insertion errors
         return null;
     }
 }
@@ -103,7 +109,7 @@ function getJobs(db) {
             return obj;
         });
     } catch (err) {
-        console.error("Error running getJobs:", err.message);
+        console.error("Error executing getJobs:", err.message);
         return [];
     }
 }
