@@ -1,117 +1,78 @@
-const initSqlJs = require("sql.js");
-const fs = require("fs");
-const path = require("path");
+const { Pool } = require("pg");
 
-// Dedicated volume directory to avoid overwriting application code
-const dataDir = path.join(__dirname, "../data");
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const dbPath = path.join(dataDir, "lomi.db");
-let dbInstance = null;
-
-function saveToDisk(db) {
-    if (!db) return;
-    try {
-        const data = db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(dbPath, buffer);
-    } catch (err) {
-        console.error("❌ Disk save failed:", err.message);
-    }
-}
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
 async function initializeDatabase() {
-    const SQL = await initSqlJs();
-
-    if (fs.existsSync(dbPath)) {
-        try {
-            const fileBuffer = fs.readFileSync(dbPath);
-            dbInstance = new SQL.Database(fileBuffer);
-            console.log("📂 Loaded existing lomi.db file from volume storage.");
-        } catch (e) {
-            console.error("⚠️ Failed to load disk image, initializing new DB instance:", e.message);
-            dbInstance = new SQL.Database();
-        }
-    } else {
-        dbInstance = new SQL.Database();
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS jobs (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                company TEXT,
+                location TEXT,
+                description TEXT,
+                category TEXT,
+                salary TEXT,
+                experience TEXT,
+                source TEXT,
+                apply_link TEXT UNIQUE,
+                posted_date TEXT,
+                collected_date TEXT
+            );
+            CREATE TABLE IF NOT EXISTS visitors (
+                id INT PRIMARY KEY DEFAULT 1,
+                count INT DEFAULT 1
+            );
+            INSERT INTO visitors (id, count) VALUES (1, 1) ON CONFLICT (id) DO NOTHING;
+        `);
+        console.log("✅ Managed Cloud PostgreSQL initialized successfully.");
+    } finally {
+        client.release();
     }
-
-    dbInstance.run(`
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            company TEXT,
-            location TEXT,
-            description TEXT,
-            category TEXT,
-            salary TEXT,
-            experience TEXT,
-            source TEXT,
-            apply_link TEXT UNIQUE,
-            posted_date TEXT,
-            collected_date TEXT
-        );
-        CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            count INTEGER DEFAULT 1
-        );
-        INSERT OR IGNORE INTO visitors (id, count) VALUES (1, 1);
-    `);
-
-    saveToDisk(dbInstance);
-    console.log("✅ Pure JS SQLite (sql.js) initialized successfully.");
-    return dbInstance;
 }
 
-function saveJob(db, job) {
-    if (!db) return null;
-    try {
-        db.run(
-            `INSERT INTO jobs (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                job.title,
-                job.company || "",
-                job.location || "Remote",
-                job.description || "",
-                job.category || "General",
-                job.salary || "N/A",
-                job.experience || "Entry Level",
-                job.source || "Manual",
-                job.apply_link,
-                job.posted_date || new Date().toISOString().slice(0, 10),
-                new Date().toISOString().slice(0, 10)
-            ]
-        );
+async function saveJob(job) {
+    const query = `
+        INSERT INTO jobs (title, company, location, description, category, salary, experience, source, apply_link, posted_date, collected_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (apply_link) DO NOTHING
+        RETURNING id;
+    `;
+    const values = [
+        job.title,
+        job.company || "",
+        job.location || "Remote",
+        job.description || "",
+        job.category || "General",
+        job.salary || "N/A",
+        job.experience || "Entry Level",
+        job.source || "Manual",
+        job.apply_link,
+        job.posted_date || new Date().toISOString().slice(0, 10),
+        new Date().toISOString().slice(0, 10)
+    ];
 
-        const res = db.exec("SELECT last_insert_rowid() AS id");
-        const newId = res[0]?.values[0]?.[0] || null;
-        saveToDisk(db);
-        return newId;
-    } catch (error) {
+    try {
+        const res = await pool.query(query, values);
+        return res.rows[0] ? res.rows[0].id : null;
+    } catch (err) {
+        console.error("Save job error:", err.message);
         return null;
     }
 }
 
-function getJobs(db) {
-    if (!db) return [];
+async function getJobs() {
     try {
-        const res = db.exec("SELECT * FROM jobs ORDER BY id DESC");
-        if (!res || !res.length) return [];
-        const columns = res[0].columns;
-        return res[0].values.map((row) => {
-            const obj = {};
-            columns.forEach((col, idx) => {
-                obj[col] = row[idx];
-            });
-            return obj;
-        });
+        const res = await pool.query("SELECT * FROM jobs ORDER BY id DESC");
+        return res.rows;
     } catch (err) {
-        console.error("Error executing getJobs:", err.message);
+        console.error("Get jobs error:", err.message);
         return [];
     }
 }
 
-module.exports = { initializeDatabase, saveJob, getJobs, saveToDisk };
+module.exports = { initializeDatabase, saveJob, getJobs, pool };

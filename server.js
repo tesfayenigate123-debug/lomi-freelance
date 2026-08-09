@@ -1,5 +1,5 @@
 const express = require("express");
-const { initializeDatabase, getJobs, saveToDisk } = require("./database/db");
+const { initializeDatabase, saveJob, getJobs, pool } = require("./database/db");
 const startScheduler = require("./scheduler/dailyJobs");
 
 const app = express();
@@ -7,22 +7,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Enable CORS
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
 
-let db = null;
-
-// Visitor tracking middleware
-app.use((req, res, next) => {
+// Visitor tracking
+app.use(async (req, res, next) => {
     const isPageVisit = req.path === "/" || req.path.startsWith("/job/");
-    if (isPageVisit && db) {
+    if (isPageVisit) {
         try {
-            db.run("UPDATE visitors SET count = count + 1 WHERE id = 1");
-            saveToDisk(db);
+            await pool.query("UPDATE visitors SET count = count + 1 WHERE id = 1");
         } catch (err) {
             console.error("Visitor count error:", err.message);
         }
@@ -36,15 +32,13 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/client/index.html");
 });
 
-// Endpoint to display live stats
-app.get("/stats", (req, res) => {
-    if (!db) return res.json({ totalJobs: 0, visitors: 1 });
+app.get("/stats", async (req, res) => {
     try {
-        const jobRes = db.exec("SELECT COUNT(*) FROM jobs");
-        const totalJobs = jobRes[0]?.values[0]?.[0] || 0;
-
-        const visRes = db.exec("SELECT count FROM visitors WHERE id = 1");
-        const visitors = visRes[0]?.values[0]?.[0] || 1;
+        const jobRes = await pool.query("SELECT COUNT(*) FROM jobs");
+        const visRes = await pool.query("SELECT count FROM visitors WHERE id = 1");
+        
+        const totalJobs = parseInt(jobRes.rows[0]?.count || 0, 10);
+        const visitors = parseInt(visRes.rows[0]?.count || 1, 10);
 
         res.json({ totalJobs, visitors });
     } catch (err) {
@@ -52,32 +46,27 @@ app.get("/stats", (req, res) => {
     }
 });
 
-// Fetch all jobs for main page
-app.get("/jobs", (req, res) => {
-    if (!db) return res.json([]);
+app.get("/jobs", async (req, res) => {
     try {
-        const jobs = getJobs(db);
+        const jobs = await getJobs();
         res.json(jobs);
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve jobs" });
     }
 });
 
-// Single job page route
-app.get("/job/:id", (req, res) => {
-    if (!db) return res.status(500).send("Database not ready");
+app.get("/job/:id", async (req, res) => {
     const id = Number(req.params.id);
-
     try {
-        const jobs = getJobs(db);
+        const jobs = await getJobs();
         const job = jobs.find((j) => j.id === id);
 
         if (!job) {
             return res.status(404).send("<h2>Job Not Found</h2><a href='/'>Back to Jobs</a>");
         }
 
-        const visRes = db.exec("SELECT count FROM visitors WHERE id = 1");
-        const visitorCount = visRes[0]?.values[0]?.[0] || 1;
+        const visRes = await pool.query("SELECT count FROM visitors WHERE id = 1");
+        const visitorCount = visRes.rows[0]?.count || 1;
 
         res.send(`
 <!DOCTYPE html>
@@ -113,8 +102,8 @@ app.get("/job/:id", (req, res) => {
 
 async function startServer() {
     try {
-        db = await initializeDatabase();
-        startScheduler(db);
+        await initializeDatabase();
+        startScheduler();
 
         app.listen(PORT, "0.0.0.0", () => {
             console.log(`🚀 Server running on port ${PORT}`);
