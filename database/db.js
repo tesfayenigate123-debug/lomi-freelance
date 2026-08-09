@@ -1,12 +1,18 @@
 const { Pool } = require("pg");
 
+const connectionString = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : "";
+
+if (!connectionString.startsWith("postgres://") && !connectionString.startsWith("postgresql://")) {
+    console.error("❌ Invalid DATABASE_URL provided. Current value:", connectionString);
+}
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+    connectionString: connectionString,
+    ssl: connectionString ? { rejectUnauthorized: false } : false
 });
 
 async function initializeDatabase() {
-    if (!process.env.DATABASE_URL) {
+    if (!connectionString) {
         throw new Error("DATABASE_URL environment variable is missing!");
     }
 
