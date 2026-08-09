@@ -4,7 +4,7 @@ const { saveJob, pool } = require("../database/db");
 
 function startScheduler() {
     // Schedule scraper for 12:10 PM EAT daily (09:10 UTC)
-    cron.schedule("53 4 * * *", async () => {
+    cron.schedule("58 4 * * *", async () => {
         console.log("⏰ Running scheduled daily job scrape...");
         try {
             const newJobs = await fetchJobs();

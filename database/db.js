@@ -6,6 +6,10 @@ const pool = new Pool({
 });
 
 async function initializeDatabase() {
+    if (!process.env.DATABASE_URL) {
+        throw new Error("DATABASE_URL environment variable is missing!");
+    }
+
     const client = await pool.connect();
     try {
         await client.query(`
