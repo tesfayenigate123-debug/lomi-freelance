@@ -1,16 +1,24 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
-// Create a connection pool using the MySQL URL
-const pool = mysql.createPool(process.env.DATABASE_URL);
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+if (!connectionString) {
+    throw new Error("DATABASE_URL is missing or empty in environment variables!");
+}
+
+const pool = new Pool({
+    connectionString,
+    ssl: connectionString.includes('railway.internal') 
+        ? false 
+        : { rejectUnauthorized: false }
+});
 
 async function initializeDatabase() {
     try {
-        const connection = await pool.getConnection();
-        
-        // Auto-create your jobs table if it doesn't exist
-        await connection.query(`
+        const client = await pool.connect();
+        await client.query(`
             CREATE TABLE IF NOT EXISTS jobs (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 title VARCHAR(255) NOT NULL,
                 company VARCHAR(255),
                 location VARCHAR(255),
@@ -24,11 +32,10 @@ async function initializeDatabase() {
                 collected_date VARCHAR(50)
             );
         `);
-        
-        connection.release();
-        console.log("✅ MySQL Database initialized successfully!");
+        client.release();
+        console.log("✅ PostgreSQL initialized successfully.");
     } catch (error) {
-        console.error("❌ MySQL Connection Error:", error);
+        console.error("❌ PostgreSQL Connection Error:", error);
     }
 }
 
