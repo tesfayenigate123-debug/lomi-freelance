@@ -3,7 +3,8 @@ const { Pool } = require('pg');
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 if (!connectionString) {
-    throw new Error("DATABASE_URL is missing or empty in environment variables!");
+    console.error("❌ CRITICAL ERROR: DATABASE_URL environment variable is missing!");
+    process.exit(1);
 }
 
 const pool = new Pool({
@@ -14,8 +15,9 @@ const pool = new Pool({
 });
 
 async function initializeDatabase() {
+    let client;
     try {
-        const client = await pool.connect();
+        client = await pool.connect();
         await client.query(`
             CREATE TABLE IF NOT EXISTS jobs (
                 id SERIAL PRIMARY KEY,
@@ -32,10 +34,21 @@ async function initializeDatabase() {
                 collected_date VARCHAR(50)
             );
         `);
-        client.release();
-        console.log("✅ PostgreSQL initialized successfully.");
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS visitor_counts (
+                id SERIAL PRIMARY KEY,
+                page_path VARCHAR(255) UNIQUE DEFAULT '/',
+                views INT DEFAULT 0,
+                last_visited TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        console.log("✅ Managed Cloud PostgreSQL initialized successfully.");
     } catch (error) {
-        console.error("❌ PostgreSQL Connection Error:", error);
+        console.error("❌ PostgreSQL Connection Error:", error.message);
+    } finally {
+        if (client) client.release();
     }
 }
 
