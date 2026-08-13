@@ -1,8 +1,7 @@
 const cron = require('node-cron');
 const { pool } = require('../database/db');
-// Import your actual scraping functions here (e.g., fetchArbeitnowJobs)
 
-async function saveJobsToDatabase(jobs) {
+async function saveScrapedJobs(jobs) {
     if (!Array.isArray(jobs) || jobs.length === 0) return;
 
     const client = await pool.connect();
@@ -27,9 +26,9 @@ async function saveJobsToDatabase(jobs) {
                 ]
             );
         }
-        console.log(`✅ Successfully saved ${jobs.length} jobs to the database.`);
+        console.log(`✅ Saved ${jobs.length} jobs to database.`);
     } catch (error) {
-        console.error("Scheduler execution failed:", error.message);
+        console.error("❌ Error saving scraped jobs:", error.message);
     } finally {
         client.release();
     }
@@ -37,18 +36,15 @@ async function saveJobsToDatabase(jobs) {
 
 function startScheduler() {
     console.log("⏰ Daily cron job scheduled for 12:10 PM EAT.");
-    
-    // Scheduled daily run
-    cron.schedule('26 08 * * *', async () => {
+
+    cron.schedule('31 08 * * *', async () => {
         console.log("⏰ Running scheduled daily job scrape...");
         try {
-            // Replace with your actual scraper function invocation:
-            // const jobs = await fetchArbeitnowJobs();
-            // await saveJobsToDatabase(jobs);
+            // Call your scraper function here and pass results to saveScrapedJobs
         } catch (error) {
             console.error("Scheduler execution failed:", error.message);
         }
     });
 }
 
-module.exports = { startScheduler, saveJobsToDatabase };
+module.exports = { startScheduler, saveScrapedJobs };
